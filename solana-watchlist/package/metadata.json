@@ -1,0 +1,15 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Jesper Dote", "Email": "jesperdote@gmail.com" }],
+        "Category": "Online Services",
+        "Description": "Solana token market caps from DexScreener with colour-coded 5m/1h/6h/24h price change; add, hide and remove tokens from the popup",
+        "Icon": "office-chart-line",
+        "Id": "com.github.jesperdote.solanawatchlist",
+        "License": "MIT",
+        "Name": "Solana Watchlist",
+        "Version": "1.0.0",
+        "Website": "https://github.com/jesperdote/plasma-widgets"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
