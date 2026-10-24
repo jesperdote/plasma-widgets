@@ -8,5 +8,9 @@
     <entry name="panelWindows" type="String">
       <default>m5,h1,h6,h24</default>
     </entry>
+    <!-- Draw a solid rounded background behind the panel text (off = transparent) -->
+    <entry name="solidBackground" type="Bool">
+      <default>false</default>
+    </entry>
   </group>
 </kcfg>
