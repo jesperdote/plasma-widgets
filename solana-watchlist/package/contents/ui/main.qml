@@ -17,12 +17,11 @@ PlasmoidItem {
     readonly property string backend: "python3 '" + decodeURIComponent(Qt.resolvedUrl("../code/sol-mc").toString().replace("file://", "")) + "'"
     readonly property int maxInPanel: 3
     readonly property int panelFontSize: 14
-    // One colour per time frame, same in the panel and the popup.
     readonly property var windows: [
-        { key: "m5",  label: "5m",  color: "#8BD5CA" },
-        { key: "h1",  label: "1h",  color: "#8AADF4" },
-        { key: "h6",  label: "6h",  color: "#EED49F" },
-        { key: "h24", label: "24h", color: "#F5BDE6" }
+        { key: "m5",  label: "5m" },
+        { key: "h1",  label: "1h" },
+        { key: "h6",  label: "6h" },
+        { key: "h24", label: "24h" }
     ]
     property var tokens: []
     readonly property var shown: tokens.filter(t => !t.hidden)
@@ -47,6 +46,16 @@ PlasmoidItem {
         property color frameColor
         color: frameColor
         onColorChanged: if (!Qt.colorEqual(color, frameColor)) Qt.callLater(() => color = frameColor)
+    }
+
+    // Green up, red down; plain text when DexScreener has no figure. Fixed colours rather than
+    // the theme's positive/negative ones, which some themes make the same hue.
+    readonly property color upColor: "#3FB950"
+    readonly property color downColor: "#F85149"
+    function changeColor(c) {
+        if (c === undefined || c === null)
+            return Kirigami.Theme.textColor
+        return c >= 0 ? upColor : downColor
     }
 
     function fmt(c) {
@@ -135,10 +144,26 @@ PlasmoidItem {
                                   : "Click to add a token"
 
     compactRepresentation: MouseArea {
-        Layout.minimumWidth: row.implicitWidth + Kirigami.Units.smallSpacing * 2
+        readonly property bool solid: Plasmoid.configuration.solidBackground
+        Layout.minimumWidth: row.implicitWidth + (solid ? Kirigami.Units.largeSpacing * 2 : Kirigami.Units.smallSpacing * 2)
         Layout.preferredWidth: Layout.minimumWidth
         hoverEnabled: true
         onClicked: root.expanded = !root.expanded
+
+        // Optional solid pill behind the text; off = transparent (panel / Panel Colorizer shows through).
+        Rectangle {
+            visible: parent.solid
+            anchors.fill: parent
+            anchors.topMargin: Kirigami.Units.smallSpacing
+            anchors.bottomMargin: Kirigami.Units.smallSpacing
+            radius: height / 4
+            // Tooltip colours: the theme's raised surface, so it stands out from the panel.
+            Kirigami.Theme.colorSet: Kirigami.Theme.Tooltip
+            Kirigami.Theme.inherit: false
+            color: Kirigami.Theme.backgroundColor
+            border.width: 1
+            border.color: Qt.alpha(Kirigami.Theme.highlightColor, 0.45)
+        }
 
         RowLayout {
             id: row
@@ -164,7 +189,7 @@ PlasmoidItem {
                         delegate: FrameLabel {
                             required property var modelData
                             text: modelData.label + " " + root.fmt(tokenRow.modelData.changes[modelData.key])
-                            frameColor: modelData.color
+                            frameColor: root.changeColor(tokenRow.modelData.changes[modelData.key])
                             font.pointSize: root.panelFontSize
                         }
                     }
@@ -225,13 +250,17 @@ PlasmoidItem {
                             checked: root.panelKeys.includes(windowToggle.modelData.key)
                             onToggled: root.togglePanelWindow(windowToggle.modelData.key, checked)
                         }
-                        FrameLabel {
+                        PC3.Label {
                             text: windowToggle.modelData.label
-                            frameColor: windowToggle.modelData.color
                         }
                     }
                 }
                 Item { Layout.fillWidth: true }
+                PC3.CheckBox {
+                    text: "Solid background"
+                    checked: Plasmoid.configuration.solidBackground
+                    onToggled: Plasmoid.configuration.solidBackground = checked
+                }
             }
 
             PC3.ScrollView {
@@ -285,7 +314,7 @@ PlasmoidItem {
                                         delegate: FrameLabel {
                                             required property var modelData
                                             text: modelData.label + " " + root.fmt(item.modelData.changes[modelData.key])
-                                            frameColor: modelData.color
+                                            frameColor: root.changeColor(item.modelData.changes[modelData.key])
                                         }
                                     }
                                 }
