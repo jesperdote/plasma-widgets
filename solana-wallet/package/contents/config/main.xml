@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- Hide holdings worth under $1 or with no price (airdropped spam, NFTs); SOL always shows -->
+    <entry name="hideSmall" type="Bool">
+      <default>true</default>
+    </entry>
+    <!-- Draw a solid rounded background behind the panel text (off = transparent) -->
+    <entry name="solidBackground" type="Bool">
+      <default>false</default>
+    </entry>
+  </group>
+</kcfg>
