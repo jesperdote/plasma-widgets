@@ -19,6 +19,8 @@ price change over 5 minutes, 1 hour, 6 hours and 24 hours in green (up) or red (
 - **Choose the time frames** shown on the panel with the checkboxes at the top of the popup,
   and whether the panel text sits on a **solid background** or a transparent one.
 - **Live market cap, updated every ~5 seconds.**
+- **Open in a window** with the button at the top of the popup: the same view as a normal
+  window you can move, resize and keep open.
 
 Market data comes from two public APIs, no key or account needed:
 

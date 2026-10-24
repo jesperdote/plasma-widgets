@@ -14,6 +14,8 @@ A KDE Plasma 6 panel widget showing the USD value of one or more Solana wallets,
 - **Hide values** with the eye button in the popup, or by middle-clicking the widget: dollar
   values and amounts become `$•••`, while symbols and 24h changes stay visible. Handy when
   sharing your screen.
+- **Open in a window** with the button at the top of the popup: the same view as a normal
+  window you can move, resize and keep open.
 
 Read-only: it only looks up public balances by address. It never sees a private key and
 can't sign or send anything.
