@@ -16,6 +16,8 @@ PlasmoidItem {
     readonly property string backend: "python3 '" + decodeURIComponent(Qt.resolvedUrl("../code/sol-wallet").toString().replace("file://", "")) + "'"
     readonly property int panelFontSize: 14
     readonly property bool hideSmall: Plasmoid.configuration.hideSmall
+    // Privacy: mask dollar values and amounts (symbols and % changes stay visible).
+    readonly property bool hideValues: Plasmoid.configuration.hideValues
     readonly property color upColor: "#3FB950"
     readonly property color downColor: "#F85149"
 
@@ -57,6 +59,18 @@ PlasmoidItem {
         if (v >= 1000)
             return "$" + Math.round(v).toLocaleString(Qt.locale("en_US"), "f", 0)
         return "$" + v.toFixed(2)
+    }
+
+    function shownUsd(v) {
+        return hideValues && v !== null && v !== undefined ? "$•••" : fmtUsd(v)
+    }
+
+    function shownAmount(a) {
+        return hideValues ? "•••" : fmtAmount(a)
+    }
+
+    function toggleHideValues() {
+        Plasmoid.configuration.hideValues = !Plasmoid.configuration.hideValues
     }
 
     function fmtAmount(a) {
@@ -146,7 +160,7 @@ PlasmoidItem {
     }
 
     toolTipMainText: "Solana wallets"
-    toolTipSubText: wallets.length ? wallets.map(w => w.label + ": " + fmtUsd(w.totalUsd)).join("\n") + "\nClick for holdings"
+    toolTipSubText: wallets.length ? wallets.map(w => w.label + ": " + shownUsd(w.totalUsd)).join("\n") + "\nClick for holdings"
                                    : "Click to add a wallet"
 
     compactRepresentation: MouseArea {
@@ -154,7 +168,9 @@ PlasmoidItem {
         Layout.minimumWidth: row.implicitWidth + (solid ? Kirigami.Units.largeSpacing * 2 : Kirigami.Units.smallSpacing * 2)
         Layout.preferredWidth: Layout.minimumWidth
         hoverEnabled: true
-        onClicked: root.expanded = !root.expanded
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        // Middle-click hides/shows the values without opening the popup.
+        onClicked: mouse => mouse.button === Qt.MiddleButton ? root.toggleHideValues() : root.expanded = !root.expanded
 
         Rectangle {
             visible: parent.solid
@@ -174,7 +190,7 @@ PlasmoidItem {
             anchors.centerIn: parent
             spacing: Kirigami.Units.smallSpacing * 2
             PC3.Label {
-                text: root.wallets.length ? "👛 " + root.fmtUsd(root.totalUsd) : "👛 add wallet"
+                text: root.wallets.length ? "👛 " + root.shownUsd(root.totalUsd) : "👛 add wallet"
                 font.pointSize: root.panelFontSize
             }
             ChangeLabel {
@@ -202,12 +218,18 @@ PlasmoidItem {
                 Kirigami.Heading {
                     level: 3
                     visible: root.wallets.length > 0
-                    text: root.fmtUsd(root.totalUsd)
+                    text: root.shownUsd(root.totalUsd)
                 }
                 ChangeLabel {
                     visible: root.change24h !== null
                     text: root.fmtChange(root.change24h) + " 24h"
                     wanted: root.changeColor(root.change24h)
+                }
+                PC3.ToolButton {
+                    icon.name: root.hideValues ? "layer-visible-off" : "layer-visible-on"
+                    onClicked: root.toggleHideValues()
+                    PC3.ToolTip.text: root.hideValues ? "Show values" : "Hide values (also: middle-click the panel)"
+                    PC3.ToolTip.visible: hovered
                 }
                 PC3.ToolButton {
                     icon.name: "view-refresh"
@@ -281,7 +303,7 @@ PlasmoidItem {
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
                                     font.bold: true
-                                    text: walletItem.modelData.label + "  ·  " + root.fmtUsd(walletItem.modelData.totalUsd)
+                                    text: walletItem.modelData.label + "  ·  " + root.shownUsd(walletItem.modelData.totalUsd)
                                 }
                                 RowLayout {
                                     PC3.Label {
@@ -374,14 +396,14 @@ PlasmoidItem {
                                         elide: Text.ElideRight
                                         opacity: 0.6
                                         font: Kirigami.Theme.smallFont
-                                        text: root.fmtAmount(holding.modelData.amount) + (holding.modelData.name ? "  ·  " + holding.modelData.name : "")
+                                        text: root.shownAmount(holding.modelData.amount) + (holding.modelData.name ? "  ·  " + holding.modelData.name : "")
                                     }
                                 }
                                 ColumnLayout {
                                     spacing: 0
                                     PC3.Label {
                                         Layout.alignment: Qt.AlignRight
-                                        text: root.fmtUsd(holding.modelData.usd)
+                                        text: root.shownUsd(holding.modelData.usd)
                                         opacity: holding.modelData.usd === null ? 0.5 : 1
                                     }
                                     ChangeLabel {
