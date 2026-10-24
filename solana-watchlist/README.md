@@ -12,8 +12,8 @@ price change over 5 minutes, 1 hour, 6 hours and 24 hours in green (up) or red (
   DexScreener, copy the address, or remove it.
 - **Market cap alerts:** the 🔔 button sets an "above" and/or "below" level per token
   (`50M`, `1.2B`, `300K`…). When the market cap reaches or crosses it you get a desktop
-  notification with a sound, once per crossing: it re-arms after moving back 1% past the
-  level, so a price hovering on the line doesn't spam you.
+  notification with a sound, and that alert is cleared. A level the market cap is already
+  past isn't saved.
 - **Add a token** by pasting its address into the popup. It is checked against DexScreener
   before it's added.
 - **Choose the time frames** shown on the panel with the checkboxes at the top of the popup,

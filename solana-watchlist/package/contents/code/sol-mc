@@ -11,8 +11,8 @@ one request (max 30 tokens) and cached locally for as long as its CDN caches it.
 
 Market-cap alerts (~/.config/sol-mc/alerts.json): per token, "above" and/or "below" a
 level. Checked on every run; when the market cap reaches or crosses a level, a desktop
-notification (with sound) is sent once. The alert re-arms after the market cap moves back
-past the level by REARM (1%), so a price hovering on the line doesn't spam.
+notification (with sound) is sent and that alert is deleted (one-shot). A level the market
+cap is already past isn't saved.
 
   sol-mc            one-line summary, e.g. "◎ BONK $272M 5m ▲0.1% 1h ▼0.6% 6h ▲2.1% 24h ▼1.0%"
   sol-mc --tooltip  one line per token: name, market cap, price, changes
@@ -40,7 +40,6 @@ JUP_STALE = 30    # past this, a failed Jupiter fetch means DexScreener's own pr
 MAX_IN_PANEL = 3
 ADDRESS_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")  # base58
 HIDDEN = set()  # addresses written with a leading "-" in the watchlist
-REARM = 0.01    # an alert re-arms once the market cap is back 1% past its level
 
 
 def read_watchlist():
@@ -253,25 +252,25 @@ def notify(title, body):
 
 
 def check_alerts(tokens, pairs):
-    """Fire armed alerts whose level was reached; re-arm fired ones once the market cap is
-    back past the level by REARM. Only touches the file when something changed."""
+    """Fire and delete every alert whose level the market cap has reached."""
     alerts = load_alerts()
     changed = False
     labels = dict(tokens)
-    for addr, levels in alerts.items():
+    for addr in list(alerts):
         p = pairs.get(addr)
         mc = mc_of(p)
         if not mc:
             continue
-        for direction, a in levels.items():
-            level = a["level"]
-            if a["armed"] and reached(direction, mc, level):
+        for direction in list(alerts[addr]):
+            level = alerts[addr][direction]["level"]
+            if reached(direction, mc, level):
                 sym = labels.get(addr) or p.get("baseToken", {}).get("symbol", addr[:4])
                 word = "up to" if direction == "above" else "down to"
-                notify(f"{sym} market cap {word} {money(level)}", f"Now {money(mc)} (alert: {direction} {money(level)})")
-                a["armed"], changed = False, True
-            elif not a["armed"] and not reached(direction, mc, level * (1 - REARM if direction == "above" else 1 + REARM)):
-                a["armed"], changed = True, True
+                notify(f"{sym} market cap {word} {money(level)}", f"Now {money(mc)} (alert: {direction} {money(level)}, now cleared)")
+                del alerts[addr][direction]
+                changed = True
+        if not alerts[addr]:
+            del alerts[addr]
     if changed:
         save_alerts(alerts)
     return alerts
@@ -294,12 +293,11 @@ def set_alert(tokens, addr, direction, amount):
         return False, "Enter an amount like 50M, 1.2B or 300K."
     pairs, _ = data(tokens)
     mc = mc_of(pairs.get(addr))
-    # Already past the level: arm it only once it comes back, so it alerts on the next cross.
-    armed = not (mc and reached(direction, mc, level))
-    alerts.setdefault(addr, {})[direction] = {"level": level, "armed": armed}
+    if mc and reached(direction, mc, level):
+        return False, f"Not saved: market cap is already {direction} {money(level)} ({money(mc)})"
+    alerts.setdefault(addr, {})[direction] = {"level": level}
     save_alerts(alerts)
-    note = "" if armed else f" (already {direction} it at {money(mc)}; alerts on the next cross)"
-    return True, f"Alert set: {direction} {money(level)}{note}"
+    return True, f"Alert set: {direction} {money(level)}"
 
 
 def as_json(tokens, pairs, at, alerts=None):
@@ -318,7 +316,7 @@ def as_json(tokens, pairs, at, alerts=None):
             "price": p.get("priceUsd", "") if p else "",
             "changes": (p or {}).get("priceChange") or {},
             "url": (p or {}).get("url") or f"https://dexscreener.com/solana/{addr}",
-            "alerts": {d: {"level": a["level"], "text": money(a["level"]), "armed": a["armed"]}
+            "alerts": {d: {"level": a["level"], "text": money(a["level"])}
                        for d, a in (alerts or {}).get(addr, {}).items()},
         })
     return {"tokens": out, "age": int(time.time() - at) if at else None}
