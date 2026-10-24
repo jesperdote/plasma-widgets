@@ -13,11 +13,19 @@ colour-coded price change over 5 minutes, 1 hour, 6 hours and 24 hours.
 - **Add a token** by pasting its address into the popup. It is checked against DexScreener
   before it's added.
 - **Choose the time frames** shown on the panel with the checkboxes at the top of the popup.
-- **Refreshes every 5 seconds.** All tokens are fetched in one request, well inside
-  DexScreener's limit of 300 requests a minute.
+- **Live market cap, updated every ~5 seconds.**
 
-Market data comes from the public [DexScreener API](https://docs.dexscreener.com/): for
-each token, the trading pair with the most liquidity. No API key or account is needed.
+Market data comes from two public APIs, no key or account needed:
+
+- [DexScreener](https://docs.dexscreener.com/) (for each token, the trading pair with the
+  most liquidity) for supply, market cap and the 5m/1h/6h/24h changes. Its responses are
+  cached at the CDN for 30 seconds, so it's fetched every 30 seconds.
+- [Jupiter's price API](https://dev.jup.ag/docs/price-api) for the current price, fresh to
+  about 5 seconds; the market cap is scaled to it between DexScreener updates.
+
+All tokens go in one request per source, well inside both rate limits (Jupiter's free
+tier allows about 5 requests per 10 seconds). If Jupiter is unreachable or rate-limited,
+the widget falls back to DexScreener's price.
 
 ## Requirements
 

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Backend for the Solana Watchlist Plasma widget; also usable on its own from a terminal.
 
-Market data comes from the public DexScreener API (no key needed): for each token, the
-pair with the most liquidity. Watchlist: ~/.config/sol-mc/watchlist, one token (mint)
+Market data, both public and keyless: DexScreener (for each token, the pair with the most
+liquidity) gives supply, market cap and the 5m/1h/6h/24h changes, but is CDN-cached for
+30 s; Jupiter's price API is fresh to ~5 s, so its price is laid on top and the market cap
+scaled to it. Watchlist: ~/.config/sol-mc/watchlist, one token (mint)
 address per line, optional label after it; `#` comments allowed. A leading `-` hides that
-token from the panel (still listed, and fetched, in the popup). Results are cached for 4 s
-(the widget refreshes every 5 s); everything is fetched in one request (max 30 tokens).
+token from the panel (still listed, and fetched, in the popup). Each source is fetched in
+one request (max 30 tokens) and cached locally for as long as its CDN caches it.
 
   sol-mc            one-line summary, e.g. "◎ BONK $272M 5m ▲0.1% 1h ▼0.6% 6h ▲2.1% 24h ▼1.0%"
   sol-mc --tooltip  one line per token: name, market cap, price, changes
@@ -21,7 +23,12 @@ import urllib.request
 
 CONF = os.path.expanduser("~/.config/sol-mc/watchlist")
 CACHE = os.path.expanduser("~/.cache/sol-mc.json")
+JUP_CACHE = os.path.expanduser("~/.cache/sol-mc-jupiter.json")
 API = "https://api.dexscreener.com/latest/dex/tokens/{}"
+JUP_API = "https://lite-api.jup.ag/price/v3?ids={}"
+DS_MAX_AGE = 30   # DexScreener: Cache-Control max-age=30, polling faster returns the same data
+JUP_MAX_AGE = 5   # Jupiter lite: max-age=5, and only ~5 requests per 10 s before HTTP 429
+JUP_STALE = 30    # past this, a failed Jupiter fetch means DexScreener's own price is used
 MAX_IN_PANEL = 3
 ADDRESS_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")  # base58
 HIDDEN = set()  # addresses written with a leading "-" in the watchlist
@@ -61,24 +68,54 @@ def fetch(addresses):
     return best
 
 
-def data(tokens, max_age=4):
-    addrs = [a for a, _ in tokens]
+def cached(path, addrs, max_age, fetcher):
+    """(value, fetched_at) from a JSON file cache, refetched when older than max_age."""
     try:
-        with open(CACHE) as f:
+        with open(path) as f:
             cache = json.load(f)
-        if time.time() - cache["at"] < max_age and cache["addrs"] == addrs:
-            return cache["pairs"], cache["at"]
+        if cache["addrs"] != addrs:
+            cache = None
+        elif time.time() - cache["at"] < max_age:
+            return cache["value"], cache["at"]
     except (OSError, ValueError, KeyError):
         cache = None
     try:
-        pairs = fetch(addrs[:30])
+        value = fetcher(addrs)
     except Exception:
-        # Offline / API hiccup: keep showing the last good numbers.
-        return (cache["pairs"], cache["at"]) if cache else ({}, 0)
-    with open(CACHE + ".tmp", "w") as f:
-        json.dump({"at": time.time(), "addrs": addrs, "pairs": pairs}, f)
-    os.replace(CACHE + ".tmp", CACHE)
-    return pairs, time.time()
+        # Offline / API hiccup / rate limited: keep the last good numbers.
+        return (cache["value"], cache["at"]) if cache else ({}, 0)
+    with open(path + ".tmp", "w") as f:
+        json.dump({"at": time.time(), "addrs": addrs, "value": value}, f)
+    os.replace(path + ".tmp", path)
+    return value, time.time()
+
+
+def fetch_jupiter(addresses):
+    """{address: USD price} from Jupiter."""
+    req = urllib.request.Request(JUP_API.format(",".join(addresses)), headers={"User-Agent": "sol-mc"})
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return {a: float(v["usdPrice"]) for a, v in json.load(resp).items() if v and v.get("usdPrice")}
+
+
+def data(tokens):
+    addrs = [a for a, _ in tokens][:30]
+    pairs, at = cached(CACHE, addrs, DS_MAX_AGE, fetch)
+    prices, jup_at = cached(JUP_CACHE, addrs, JUP_MAX_AGE, fetch_jupiter)
+    if not prices or time.time() - jup_at > JUP_STALE:
+        return pairs, at
+    live = {}
+    for addr, p in pairs.items():
+        p = dict(p)
+        old, new = float(p.get("priceUsd") or 0), prices.get(addr)
+        if old > 0 and new:
+            # Supply doesn't change between DexScreener refreshes, so MC scales with price.
+            for key in ("marketCap", "fdv"):
+                if p.get(key):
+                    p[key] = p[key] * new / old
+            p["priceUsd"] = f"{new:.10g}"
+            p["live"] = True
+        live[addr] = p
+    return live, max(at, jup_at)
 
 
 def money(v):

@@ -123,7 +123,7 @@ PlasmoidItem {
     }
 
     Timer {
-        interval: 5000
+        interval: 2000  // cheap when nothing is due: the backend only hits the network when its caches expire
         running: true
         repeat: true
         triggeredOnStart: true
