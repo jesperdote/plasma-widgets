@@ -8,6 +8,10 @@
     <entry name="hideSmall" type="Bool">
       <default>true</default>
     </entry>
+    <!-- Privacy: mask dollar values and amounts on the panel and in the popup -->
+    <entry name="hideValues" type="Bool">
+      <default>false</default>
+    </entry>
     <!-- Draw a solid rounded background behind the panel text (off = transparent) -->
     <entry name="solidBackground" type="Bool">
       <default>false</default>

@@ -11,6 +11,9 @@ A KDE Plasma 6 panel widget showing the USD value of one or more Solana wallets,
 - **Hide balances under $1** (on by default) hides dust, NFTs and the worthless tokens that
   get airdropped to wallets as spam; SOL always shows.
 - **Solid or transparent** background behind the panel text.
+- **Hide values** with the eye button in the popup, or by middle-clicking the widget: dollar
+  values and amounts become `$•••`, while symbols and 24h changes stay visible. Handy when
+  sharing your screen.
 
 Read-only: it only looks up public balances by address. It never sees a private key and
 can't sign or send anything.
