@@ -2,6 +2,7 @@
 // (~/.config/sol-mc/watchlist) all live in ../code/sol-mc; this is just the view.
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasmoid
@@ -238,7 +239,9 @@ PlasmoidItem {
         }
     }
 
-    fullRepresentation: PlasmaExtras.Representation {
+    // The popup's contents, also used for the movable window below.
+    component MainView: PlasmaExtras.Representation {
+        property bool inWindow: false
         Layout.preferredWidth: Kirigami.Units.gridUnit * 36
         Layout.preferredHeight: Kirigami.Units.gridUnit * 20
         collapseMarginsHint: true
@@ -254,6 +257,13 @@ PlasmoidItem {
                 PC3.Label {
                     opacity: 0.6
                     text: root.age > 120 ? "updated " + Math.round(root.age / 60) + " min ago" : ""
+                }
+                PC3.ToolButton {
+                    visible: !inWindow
+                    icon.name: "window-new"
+                    onClicked: root.openWindow()
+                    PC3.ToolTip.text: "Open in a window you can move and resize"
+                    PC3.ToolTip.visible: hovered
                 }
                 PC3.ToolButton {
                     icon.name: "view-refresh"
@@ -479,6 +489,44 @@ PlasmoidItem {
                     text: "Add"
                     enabled: !root.busy && addressField.text.trim() !== ""
                     onClicked: root.change("--add", addressField.text.trim())
+                }
+            }
+        }
+    }
+
+    fullRepresentation: MainView {}
+
+    function openWindow() {
+        root.expanded = false
+        detached.show()
+        detached.raise()
+        detached.requestActivate()
+    }
+
+    // Panel popups are pinned to the panel; this is the same view as a normal window
+    // (movable, resizable, stays open until closed).
+    Window {
+        id: detached
+        title: "Solana Watchlist"
+        width: Kirigami.Units.gridUnit * 36
+        height: Kirigami.Units.gridUnit * 26
+        minimumWidth: Kirigami.Units.gridUnit * 24
+        minimumHeight: Kirigami.Units.gridUnit * 14
+        visible: false
+
+        Rectangle {
+            anchors.fill: parent
+            Kirigami.Theme.colorSet: Kirigami.Theme.Window
+            Kirigami.Theme.inherit: false
+            color: Kirigami.Theme.backgroundColor
+        }
+        Loader {
+            anchors.fill: parent
+            anchors.margins: Kirigami.Units.smallSpacing
+            active: detached.visible
+            sourceComponent: Component {
+                MainView {
+                    inWindow: true
                 }
             }
         }
