@@ -1,0 +1,15 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Jesper Dote", "Email": "jesperdote@gmail.com" }],
+        "Category": "Online Services",
+        "Description": "Solana wallet value on the panel; the popup lists SOL and every token held, with logos, amounts, USD value and 24h change",
+        "Icon": "wallet-open",
+        "Id": "com.github.jesperdote.solanawallet",
+        "License": "MIT",
+        "Name": "Solana Wallet",
+        "Version": "1.0.0",
+        "Website": "https://github.com/jesperdote/plasma-widgets"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""Backend for the Solana Wallet Plasma widget; also usable on its own from a terminal.
+
+Balances come from a Solana RPC node (SOL plus every token account, both token programs);
+symbol, name, logo, USD price and 24h change come from Jupiter's token API. Both are
+public and keyless. Wallets: ~/.config/sol-wallet/wallets, one address per line, optional
+label after it. A different RPC endpoint (e.g. a free Helius/QuickNode URL, if the public
+one rate-limits you) can go in ~/.config/sol-wallet/rpc or $SOL_RPC_URL.
+
+Balances are cached for 60 s and prices for 30 s, so calling this often is cheap.
+
+  sol-wallet                 one-line summary, e.g. "👛 $1,234 ▲2.1%"
+  sol-wallet --json          everything the widget shows
+  sol-wallet --add ADDRESS [LABEL] / --remove ADDRESS   change the wallet list, then print --json
+"""
+import json
+import os
+import re
+import sys
+import time
+import urllib.request
+
+CONF_DIR = os.path.expanduser("~/.config/sol-wallet")
+WALLETS = os.path.join(CONF_DIR, "wallets")
+RPC_FILE = os.path.join(CONF_DIR, "rpc")
+CACHE = os.path.expanduser("~/.cache/sol-wallet.json")
+DEFAULT_RPC = "https://api.mainnet-beta.solana.com"
+TOKEN_SEARCH = "https://lite-api.jup.ag/tokens/v2/search?query={}"
+TOKEN_PROGRAMS = ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",   # SPL Token
+                  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")   # Token-2022
+SOL_MINT = "So11111111111111111111111111111111111111112"
+BALANCE_MAX_AGE = 60
+PRICE_MAX_AGE = 30
+ADDRESS_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")  # base58
+UA = {"User-Agent": "sol-wallet"}
+
+
+def read_wallets():
+    wallets = []
+    try:
+        with open(WALLETS) as f:
+            for line in f:
+                line = line.split("#", 1)[0].strip()
+                if line:
+                    addr, _, label = line.partition(" ")
+                    wallets.append((addr, label.strip()))
+    except FileNotFoundError:
+        pass
+    return wallets
+
+
+def write_wallets(wallets):
+    os.makedirs(CONF_DIR, exist_ok=True)
+    with open(WALLETS, "w") as f:
+        f.write("# One Solana wallet address per line, optional label after it.\n")
+        f.writelines(f"{a} {l}".strip() + "\n" for a, l in wallets)
+
+
+def rpc_url():
+    if os.environ.get("SOL_RPC_URL"):
+        return os.environ["SOL_RPC_URL"]
+    try:
+        with open(RPC_FILE) as f:
+            return f.read().strip() or DEFAULT_RPC
+    except FileNotFoundError:
+        return DEFAULT_RPC
+
+
+def rpc(method, params):
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    req = urllib.request.Request(rpc_url(), data=body, headers={"Content-Type": "application/json", **UA})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        out = json.load(resp)
+    if "error" in out:
+        raise RuntimeError(out["error"].get("message", out["error"]))
+    return out["result"]
+
+
+def balances(address):
+    """{mint: ui amount} for one wallet, SOL included under its wrapped-SOL mint."""
+    held = {SOL_MINT: rpc("getBalance", [address])["value"] / 1e9}
+    for program in TOKEN_PROGRAMS:
+        accounts = rpc("getTokenAccountsByOwner", [address, {"programId": program}, {"encoding": "jsonParsed"}])
+        for acc in accounts["value"]:
+            info = acc["account"]["data"]["parsed"]["info"]
+            amount = info["tokenAmount"].get("uiAmount") or 0
+            if amount:
+                held[info["mint"]] = held.get(info["mint"], 0) + amount
+    return held
+
+
+def token_info(mints):
+    """{mint: {symbol, name, icon, price, change24h, verified}} from Jupiter, 50 mints a call."""
+    info = {}
+    mints = list(mints)
+    for i in range(0, len(mints), 50):
+        req = urllib.request.Request(TOKEN_SEARCH.format(",".join(mints[i:i + 50])), headers=UA)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            for t in json.load(resp):
+                info[t["id"]] = {
+                    "symbol": t.get("symbol") or "?",
+                    "name": t.get("name") or "",
+                    "icon": t.get("icon") or "",
+                    "price": t.get("usdPrice"),
+                    "change24h": (t.get("stats24h") or {}).get("priceChange"),
+                    "verified": bool(t.get("isVerified")),
+                }
+    return info
+
+
+def load_cache():
+    try:
+        with open(CACHE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_cache(cache):
+    os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+    with open(CACHE + ".tmp", "w") as f:
+        json.dump(cache, f)
+    os.replace(CACHE + ".tmp", CACHE)
+
+
+def refresh(wallets, force=False):
+    """Fill the cache: balances per wallet (60 s) and token info for every mint held (30 s).
+    A failed fetch keeps the previous numbers, with the error noted."""
+    cache = load_cache()
+    now = time.time()
+    held = cache.setdefault("balances", {})
+    errors = {}
+    for addr, _ in wallets:
+        entry = held.get(addr)
+        if force or not entry or now - entry["at"] >= BALANCE_MAX_AGE:
+            try:
+                held[addr] = {"at": now, "held": balances(addr)}
+            except Exception as e:
+                errors[addr] = str(e)
+    for addr in list(held):
+        if addr not in (a for a, _ in wallets):
+            del held[addr]
+    mints = sorted({m for e in held.values() for m in e["held"]})
+    tokens = cache.get("tokens", {})
+    if mints and (force or now - tokens.get("at", 0) >= PRICE_MAX_AGE or set(mints) - set(tokens.get("info", {}))):
+        try:
+            cache["tokens"] = {"at": now, "info": token_info(mints)}
+        except Exception as e:
+            errors["prices"] = str(e)
+    cache["errors"] = errors
+    save_cache(cache)
+    return cache
+
+
+def short(addr):
+    return f"{addr[:4]}…{addr[-4:]}"
+
+
+def summary(wallets, cache):
+    info = cache.get("tokens", {}).get("info", {})
+    out_wallets = []
+    grand, grand_prev = 0.0, 0.0
+    for addr, label in wallets:
+        entry = cache.get("balances", {}).get(addr)
+        holdings, total, prev = [], 0.0, 0.0
+        for mint, amount in (entry or {}).get("held", {}).items():
+            t = info.get(mint, {})
+            price = t.get("price")
+            usd = amount * price if price is not None else None
+            change = t.get("change24h")
+            if usd is not None:
+                total += usd
+                # Value 24h ago at today's amounts, for a value-weighted change.
+                prev += usd / (1 + change / 100) if change not in (None, -100) else usd
+            holdings.append({
+                "mint": mint,
+                "symbol": t.get("symbol") or ("SOL" if mint == SOL_MINT else short(mint)),
+                "name": t.get("name", ""),
+                "icon": t.get("icon", ""),
+                "amount": amount,
+                "price": price,
+                "usd": usd,
+                "change24h": change,
+                "verified": t.get("verified", False),
+                "isSol": mint == SOL_MINT,
+            })
+        # SOL first, then by USD value, unpriced last.
+        holdings.sort(key=lambda h: (not h["isSol"], -(h["usd"] if h["usd"] is not None else -1)))
+        grand += total
+        grand_prev += prev
+        out_wallets.append({
+            "address": addr,
+            "label": label or short(addr),
+            "short": short(addr),
+            "loaded": bool(entry),
+            "error": cache.get("errors", {}).get(addr, ""),
+            "totalUsd": total,
+            "change24h": (total / prev - 1) * 100 if prev else None,
+            "holdings": holdings,
+            "updated": int(time.time() - entry["at"]) if entry else None,
+        })
+    return {
+        "wallets": out_wallets,
+        "totalUsd": grand,
+        "change24h": (grand / grand_prev - 1) * 100 if grand_prev else None,
+        "priceError": cache.get("errors", {}).get("prices", ""),
+    }
+
+
+def usd(v):
+    return f"${v:,.0f}" if v >= 1000 else f"${v:,.2f}"
+
+
+def add(wallets, addr, label):
+    addr = addr.strip()
+    if not ADDRESS_RE.match(addr):
+        return False, "That doesn't look like a Solana address."
+    if addr in (a for a, _ in wallets):
+        return False, "Already in the list."
+    try:
+        sol = rpc("getBalance", [addr])["value"] / 1e9
+    except Exception as e:
+        return False, f"RPC lookup failed: {e}"
+    write_wallets(wallets + [(addr, label.strip())])
+    return True, f"Added {label.strip() or short(addr)} ({sol:,.4g} SOL)"
+
+
+def main():
+    wallets = read_wallets()
+    mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    if mode in ("--add", "--remove"):
+        addr = sys.argv[2] if len(sys.argv) > 2 else ""
+        if mode == "--add":
+            ok, msg = add(wallets, addr, " ".join(sys.argv[3:]))
+        else:
+            write_wallets([(a, l) for a, l in wallets if a != addr])
+            ok, msg = True, "Removed"
+        wallets = read_wallets()
+        print(json.dumps({"ok": ok, "message": msg, **summary(wallets, refresh(wallets))}))
+        return
+    s = summary(wallets, refresh(wallets, force=(mode == "--refresh")))
+    if mode in ("--json", "--refresh"):
+        print(json.dumps(s))
+    elif not wallets:
+        print("👛 add wallet")
+    else:
+        c = s["change24h"]
+        print(f"👛 {usd(s['totalUsd'])}" + (f" {'▲' if c >= 0 else '▼'}{abs(c):.1f}%" if c is not None else ""))
+
+
+if __name__ == "__main__":
+    main()

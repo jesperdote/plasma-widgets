@@ -6,6 +6,7 @@ anyone else. Each widget lives in its own folder with its own README and install
 | Widget | What it does |
 |---|---|
 | [Solana Watchlist](solana-watchlist/) | Market cap and 5m/1h/6h/24h price change for Solana tokens you pick, from DexScreener |
+| [Solana Wallet](solana-wallet/) | Value of your Solana wallets on the panel; SOL and every token held in the popup |
 
 ## Installing any widget
 
