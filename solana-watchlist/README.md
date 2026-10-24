@@ -8,8 +8,12 @@ price change over 5 minutes, 1 hour, 6 hours and 24 hours in green (up) or red (
 - **On the panel:** symbol, market cap and the price change for each time frame, green when
   up and red when down. Up to 3 tokens are shown, then `+N`.
 - **Click it** for the full list. Each token shows its name, market cap, price, all four
-  changes and its address, with buttons to hide it from the panel, open it on DexScreener,
-  copy the address, or remove it.
+  changes and its address, with buttons to set alerts, hide it from the panel, open it on
+  DexScreener, copy the address, or remove it.
+- **Market cap alerts:** the 🔔 button sets an "above" and/or "below" level per token
+  (`50M`, `1.2B`, `300K`…). When the market cap reaches or crosses it you get a desktop
+  notification with a sound, once per crossing: it re-arms after moving back 1% past the
+  level, so a price hovering on the line doesn't spam you.
 - **Add a token** by pasting its address into the popup. It is checked against DexScreener
   before it's added.
 - **Choose the time frames** shown on the panel with the checkboxes at the top of the popup,
@@ -32,6 +36,7 @@ the widget falls back to DexScreener's price.
 
 - KDE Plasma 6
 - Python 3 (standard library only)
+- `notify-send` (libnotify) for alerts
 
 ## Install
 
@@ -68,6 +73,8 @@ DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263 BONK
 
 A leading `-` hides that token from the panel; it stays in the popup.
 
+Alerts are kept separately in `~/.config/sol-mc/alerts.json`.
+
 ## Command line
 
 The widget's backend also works on its own:
@@ -77,6 +84,7 @@ python3 package/contents/code/sol-mc             # one-line summary
 python3 package/contents/code/sol-mc --tooltip   # one line per token
 python3 package/contents/code/sol-mc --json      # what the widget reads
 python3 package/contents/code/sol-mc --add ADDRESS   # also --remove, --hide, --show
+python3 package/contents/code/sol-mc --alert ADDRESS above 50M below 30M   # "off" clears one
 ```
 
 ## Notes

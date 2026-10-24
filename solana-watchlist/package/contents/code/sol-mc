@@ -9,19 +9,27 @@ address per line, optional label after it; `#` comments allowed. A leading `-` h
 token from the panel (still listed, and fetched, in the popup). Each source is fetched in
 one request (max 30 tokens) and cached locally for as long as its CDN caches it.
 
+Market-cap alerts (~/.config/sol-mc/alerts.json): per token, "above" and/or "below" a
+level. Checked on every run; when the market cap reaches or crosses a level, a desktop
+notification (with sound) is sent once. The alert re-arms after the market cap moves back
+past the level by REARM (1%), so a price hovering on the line doesn't spam.
+
   sol-mc            one-line summary, e.g. "◎ BONK $272M 5m ▲0.1% 1h ▼0.6% 6h ▲2.1% 24h ▼1.0%"
   sol-mc --tooltip  one line per token: name, market cap, price, changes
   sol-mc --json     all tokens as JSON (what the widget reads)
   sol-mc --add / --remove / --hide / --show ADDRESS   change the watchlist, then print --json
+  sol-mc --alert ADDRESS above|below AMOUNT|off [...]  set/clear alerts (AMOUNT like 50M, 1.2B)
 """
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.request
 
 CONF = os.path.expanduser("~/.config/sol-mc/watchlist")
+ALERTS = os.path.expanduser("~/.config/sol-mc/alerts.json")
 CACHE = os.path.expanduser("~/.cache/sol-mc.json")
 JUP_CACHE = os.path.expanduser("~/.cache/sol-mc-jupiter.json")
 API = "https://api.dexscreener.com/latest/dex/tokens/{}"
@@ -32,6 +40,7 @@ JUP_STALE = 30    # past this, a failed Jupiter fetch means DexScreener's own pr
 MAX_IN_PANEL = 3
 ADDRESS_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")  # base58
 HIDDEN = set()  # addresses written with a leading "-" in the watchlist
+REARM = 0.01    # an alert re-arms once the market cap is back 1% past its level
 
 
 def read_watchlist():
@@ -203,7 +212,97 @@ def add(tokens, addr):
     return True, f"Added {t.get('name')} ({t.get('symbol')})"
 
 
-def as_json(tokens, pairs, at):
+def parse_amount(text):
+    """"50M" / "$1.2b" / "300,000" -> float, or None."""
+    m = re.fullmatch(r"\$?\s*([0-9][0-9,]*\.?[0-9]*)\s*([kmb]?)", text.strip().lower())
+    if not m:
+        return None
+    return float(m.group(1).replace(",", "")) * {"": 1, "k": 1e3, "m": 1e6, "b": 1e9}[m.group(2)]
+
+
+def mc_of(p):
+    return float((p or {}).get("marketCap") or (p or {}).get("fdv") or 0)
+
+
+def load_alerts():
+    try:
+        with open(ALERTS) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_alerts(alerts):
+    os.makedirs(os.path.dirname(ALERTS), exist_ok=True)
+    with open(ALERTS + ".tmp", "w") as f:
+        json.dump(alerts, f, indent=1)
+    os.replace(ALERTS + ".tmp", ALERTS)
+
+
+def reached(direction, mc, level):
+    return mc >= level if direction == "above" else mc <= level
+
+
+def notify(title, body):
+    try:
+        subprocess.run(["notify-send", "--app-name=Solana Watchlist", "--icon=office-chart-line",
+                        "--urgency=critical", "--hint=string:sound-name:message-attention", title, body],
+                       timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def check_alerts(tokens, pairs):
+    """Fire armed alerts whose level was reached; re-arm fired ones once the market cap is
+    back past the level by REARM. Only touches the file when something changed."""
+    alerts = load_alerts()
+    changed = False
+    labels = dict(tokens)
+    for addr, levels in alerts.items():
+        p = pairs.get(addr)
+        mc = mc_of(p)
+        if not mc:
+            continue
+        for direction, a in levels.items():
+            level = a["level"]
+            if a["armed"] and reached(direction, mc, level):
+                sym = labels.get(addr) or p.get("baseToken", {}).get("symbol", addr[:4])
+                word = "up to" if direction == "above" else "down to"
+                notify(f"{sym} market cap {word} {money(level)}", f"Now {money(mc)} (alert: {direction} {money(level)})")
+                a["armed"], changed = False, True
+            elif not a["armed"] and not reached(direction, mc, level * (1 - REARM if direction == "above" else 1 + REARM)):
+                a["armed"], changed = True, True
+    if changed:
+        save_alerts(alerts)
+    return alerts
+
+
+def set_alert(tokens, addr, direction, amount):
+    if addr not in (a for a, _ in tokens):
+        return False, "Not on the watchlist."
+    if direction not in ("above", "below"):
+        return False, "Direction must be above or below."
+    alerts = load_alerts()
+    if amount == "off":
+        alerts.get(addr, {}).pop(direction, None)
+        if not alerts.get(addr):
+            alerts.pop(addr, None)
+        save_alerts(alerts)
+        return True, f"Alert {direction} cleared"
+    level = parse_amount(amount)
+    if not level:
+        return False, "Enter an amount like 50M, 1.2B or 300K."
+    pairs, _ = data(tokens)
+    mc = mc_of(pairs.get(addr))
+    # Already past the level: arm it only once it comes back, so it alerts on the next cross.
+    armed = not (mc and reached(direction, mc, level))
+    alerts.setdefault(addr, {})[direction] = {"level": level, "armed": armed}
+    save_alerts(alerts)
+    note = "" if armed else f" (already {direction} it at {money(mc)}; alerts on the next cross)"
+    return True, f"Alert set: {direction} {money(level)}{note}"
+
+
+def as_json(tokens, pairs, at, alerts=None):
     """Everything the widget shows, one object per token."""
     out = []
     for addr, label in tokens:
@@ -219,6 +318,8 @@ def as_json(tokens, pairs, at):
             "price": p.get("priceUsd", "") if p else "",
             "changes": (p or {}).get("priceChange") or {},
             "url": (p or {}).get("url") or f"https://dexscreener.com/solana/{addr}",
+            "alerts": {d: {"level": a["level"], "text": money(a["level"]), "armed": a["armed"]}
+                       for d, a in (alerts or {}).get(addr, {}).items()},
         })
     return {"tokens": out, "age": int(time.time() - at) if at else None}
 
@@ -226,11 +327,20 @@ def as_json(tokens, pairs, at):
 def main():
     tokens = read_watchlist()
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
-    if mode in ("--add", "--remove", "--hide", "--show"):
+    if mode in ("--add", "--remove", "--hide", "--show", "--alert"):
         arg = sys.argv[2] if len(sys.argv) > 2 else ""
         if mode == "--add":
             ok, msg = add(tokens, arg)
+        elif mode == "--alert":
+            # One or more "above|below AMOUNT|off" pairs.
+            pairs_ = list(zip(sys.argv[3::2], sys.argv[4::2])) or [("", "")]
+            results = [set_alert(tokens, arg, d, a) for d, a in pairs_]
+            ok, msg = all(r[0] for r in results), "; ".join(r[1] for r in results)
         else:
+            if mode == "--remove":
+                alerts = load_alerts()
+                if alerts.pop(arg, None) is not None:
+                    save_alerts(alerts)
             if mode == "--hide":
                 HIDDEN.add(arg)
             elif mode == "--show":
@@ -240,11 +350,12 @@ def main():
         HIDDEN.clear()
         tokens = read_watchlist()
         pairs, at = data(tokens) if tokens else ({}, 0)
-        print(json.dumps({"ok": ok, "message": msg, **as_json(tokens, pairs, at)}))
+        print(json.dumps({"ok": ok, "message": msg, **as_json(tokens, pairs, at, load_alerts())}))
         return
     pairs, at = data(tokens) if tokens else ({}, 0)
+    alerts = check_alerts(tokens, pairs)
     if mode == "--json":
-        print(json.dumps(as_json(tokens, pairs, at)))
+        print(json.dumps(as_json(tokens, pairs, at, alerts)))
     else:
         print(tooltip(tokens, pairs, at) if mode == "--tooltip" else panel(tokens, pairs))
 

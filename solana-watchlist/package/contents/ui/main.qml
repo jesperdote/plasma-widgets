@@ -24,6 +24,12 @@ PlasmoidItem {
         { key: "h24", label: "24h" }
     ]
     property var tokens: []
+    // The popup list gets its own copy so it can hold still while an alert editor is open:
+    // replacing the model rebuilds the rows and would wipe what's being typed.
+    property var listTokens: []
+    property string editingAddress: ""
+    onEditingAddressChanged: if (editingAddress === "") listTokens = tokens
+    onExpandedChanged: if (!expanded) editingAddress = ""
     readonly property var shown: tokens.filter(t => !t.hidden)
     readonly property var panelKeys: Plasmoid.configuration.panelWindows.split(",").filter(k => k)
     readonly property var panelWindows: windows.filter(w => panelKeys.includes(w.key))
@@ -94,6 +100,8 @@ PlasmoidItem {
             if (tj !== lastTokensJson) {
                 lastTokensJson = tj
                 tokens = d.tokens
+                if (editingAddress === "")
+                    listTokens = d.tokens
             }
             age = d.age || 0
             return d
@@ -129,6 +137,33 @@ PlasmoidItem {
             if (d.ok && mode === "--add")
                 root.added()
         })
+    }
+
+    // Market-cap alerts: "" clears that direction, otherwise an amount like 50M / 1.2B / 300K.
+    function setAlerts(address, above, below, current) {
+        const clean = v => v.replace(/[$\s]/g, "")
+        const ok = v => v === "" || /^[0-9][0-9,]*\.?[0-9]*[kmbKMB]?$/.test(v)
+        above = clean(above); below = clean(below)
+        if (!ok(above) || !ok(below)) {
+            message = "Enter amounts like 50M, 1.2B or 300K."
+            messageIsError = true
+            return false
+        }
+        let args = []
+        if (above !== "") args.push("above", above)
+        else if (current.above) args.push("above", "off")
+        if (below !== "") args.push("below", below)
+        else if (current.below) args.push("below", "off")
+        if (!args.length)
+            return true
+        busy = true
+        exec.run(backend + " --alert " + address + " " + args.join(" "), out => {
+            busy = false
+            const d = apply(out)
+            message = d ? d.message : "Something went wrong running sol-mc."
+            messageIsError = !d || !d.ok
+        })
+        return true
     }
 
     Timer {
@@ -204,8 +239,8 @@ PlasmoidItem {
     }
 
     fullRepresentation: PlasmaExtras.Representation {
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 30
-        Layout.preferredHeight: Kirigami.Units.gridUnit * 18
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 36
+        Layout.preferredHeight: Kirigami.Units.gridUnit * 20
         collapseMarginsHint: true
 
         header: PlasmaExtras.PlasmoidHeading {
@@ -269,7 +304,7 @@ PlasmoidItem {
 
                 ListView {
                     id: list
-                    model: root.tokens
+                    model: root.listTokens
                     clip: true
                     spacing: Kirigami.Units.smallSpacing
 
@@ -285,14 +320,21 @@ PlasmoidItem {
                     delegate: PlasmaExtras.ListItem {
                         id: item
                         required property var modelData
+                        readonly property bool editing: root.editingAddress === modelData.address
                         width: ListView.view.width
                         // Hidden from the panel: still listed and updated here, just dimmed.
                         opacity: modelData.hidden ? 0.5 : 1
 
-                        contentItem: RowLayout {
+                        contentItem: ColumnLayout {
+                          spacing: 0
+                          RowLayout {
+                            Layout.fillWidth: true
                             spacing: Kirigami.Units.largeSpacing
                             ColumnLayout {
+                                // Take whatever width the buttons leave; long text is cut, never the buttons.
                                 Layout.fillWidth: true
+                                Layout.preferredWidth: 0
+                                clip: true
                                 spacing: 0
                                 PC3.Label {
                                     Layout.fillWidth: true
@@ -325,6 +367,20 @@ PlasmoidItem {
                                     font: Kirigami.Theme.smallFont
                                     text: item.modelData.address
                                 }
+                                PC3.Label {
+                                    readonly property var al: item.modelData.alerts || {}
+                                    visible: !item.editing && (al.above || al.below) ? true : false
+                                    font: Kirigami.Theme.smallFont
+                                    text: "🔔 " + [al.above ? "above " + al.above.text : "", al.below ? "below " + al.below.text : ""].filter(x => x).join(" · ")
+                                }
+                            }
+                            PC3.ToolButton {
+                                icon.name: "preferences-desktop-notification-bell"  // in Breeze and char-white; "bell" is not
+                                checked: item.editing
+                                enabled: item.modelData.found
+                                onClicked: root.editingAddress = item.editing ? "" : item.modelData.address
+                                PC3.ToolTip.text: "Market cap alerts"
+                                PC3.ToolTip.visible: hovered
                             }
                             PC3.ToolButton {
                                 icon.name: item.modelData.hidden ? "layer-visible-off" : "layer-visible-on"
@@ -352,6 +408,40 @@ PlasmoidItem {
                                 PC3.ToolTip.text: "Remove from watchlist"
                                 PC3.ToolTip.visible: hovered
                             }
+                          }
+                          // Alert editor, opened with the bell button.
+                          RowLayout {
+                              visible: item.editing
+                              Layout.topMargin: Kirigami.Units.smallSpacing
+                              PC3.Label { text: "🔔 Above $" }
+                              PC3.TextField {
+                                  id: aboveField
+                                  Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                  placeholderText: "e.g. 50M"
+                                  text: item.modelData.alerts && item.modelData.alerts.above ? item.modelData.alerts.above.text.replace("$", "") : ""
+                                  onAccepted: saveAlerts.clicked()
+                              }
+                              PC3.Label { text: "Below $" }
+                              PC3.TextField {
+                                  id: belowField
+                                  Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                  placeholderText: "e.g. 30M"
+                                  text: item.modelData.alerts && item.modelData.alerts.below ? item.modelData.alerts.below.text.replace("$", "") : ""
+                                  onAccepted: saveAlerts.clicked()
+                              }
+                              PC3.Button {
+                                  id: saveAlerts
+                                  text: "Save"
+                                  enabled: !root.busy
+                                  onClicked: if (root.setAlerts(item.modelData.address, aboveField.text, belowField.text, item.modelData.alerts || {})) root.editingAddress = ""
+                              }
+                              PC3.ToolButton {
+                                  icon.name: "dialog-cancel"
+                                  onClicked: root.editingAddress = ""
+                                  PC3.ToolTip.text: "Cancel (leave both empty and Save to remove alerts)"
+                                  PC3.ToolTip.visible: hovered
+                              }
+                          }
                         }
                     }
                 }
