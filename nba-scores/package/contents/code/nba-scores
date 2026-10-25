@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""Backend for the NBA Scores Plasma widget; also usable on its own from a terminal.
+
+Data: ESPN's public scoreboard and game-summary feeds (no key; unofficial but widely used).
+What you follow is kept in ~/.config/nba-scores/follow.json: games (ESPN game ids, added by
+starring a game or pasting an ESPN game link) and teams (abbreviations like LAL: every game
+of that team is followed). The scoreboard is cached for 10 s, game details for 10 s.
+
+  nba-scores                       one line: followed games' current score, or today's live count
+  nba-scores --json                everything the widget shows
+  nba-scores --follow TEXT         follow an ESPN game link, a game id, or a team (LAL, GSW...)
+  nba-scores --unfollow TEXT       stop following a game id or team
+"""
+import json
+import os
+import re
+import sys
+import time
+import urllib.request
+
+CONF = os.path.expanduser("~/.config/nba-scores/follow.json")
+CACHE_DIR = os.path.expanduser("~/.cache/nba-scores")
+BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
+MAX_AGE = 10
+FINAL_KEEP = 36 * 3600   # a followed game stays this long after tip-off, then drops off
+UA = {"User-Agent": "nba-scores-plasma"}
+
+
+def load_follow():
+    try:
+        with open(CONF) as f:
+            d = json.load(f)
+        return {"games": [str(g) for g in d.get("games", [])], "teams": [t.upper() for t in d.get("teams", [])]}
+    except (OSError, ValueError):
+        return {"games": [], "teams": []}
+
+
+def save_follow(fol):
+    os.makedirs(os.path.dirname(CONF), exist_ok=True)
+    with open(CONF + ".tmp", "w") as f:
+        json.dump(fol, f, indent=1)
+    os.replace(CONF + ".tmp", CONF)
+
+
+def fetch(url, cache_name, max_age=MAX_AGE):
+    """JSON from ESPN with a small file cache; on a network error the last copy is used."""
+    path = os.path.join(CACHE_DIR, cache_name + ".json")
+    try:
+        if time.time() - os.path.getmtime(path) < max_age:
+            with open(path) as f:
+                return json.load(f)
+    except (OSError, ValueError):
+        pass
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=10) as resp:
+            data = json.load(resp)
+    except Exception:
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    with open(path + ".tmp", "w") as f:
+        json.dump(data, f)
+    os.replace(path + ".tmp", path)
+    return data
+
+
+def side(c):
+    t = c.get("team", {})
+    return {"abbr": t.get("abbreviation", "?"), "name": t.get("displayName") or t.get("name", ""),
+            "logo": t.get("logo") or (t.get("logos") or [{}])[0].get("href", ""),
+            "score": c.get("score", ""), "winner": bool(c.get("winner"))}
+
+
+def game_from(event_id, comp, status, start):
+    sides = {c["homeAway"]: side(c) for c in comp.get("competitors", [])}
+    st = status.get("type", {})
+    return {"id": str(event_id), "state": st.get("state", "pre"), "detail": st.get("shortDetail", ""),
+            "period": status.get("period", 0), "clock": status.get("displayClock", ""),
+            "start": start or comp.get("date", ""), "away": sides.get("away", {}), "home": sides.get("home", {}),
+            "link": f"https://www.espn.com/nba/game/_/gameId/{event_id}"}
+
+
+def scoreboard():
+    d = fetch(BASE + "/scoreboard", "scoreboard") or {}
+    games = []
+    for e in d.get("events", []):
+        comp = e["competitions"][0]
+        games.append(game_from(e["id"], comp, e.get("status", {}), e.get("date")))
+    order = {"in": 0, "pre": 1, "post": 2}
+    games.sort(key=lambda g: (order.get(g["state"], 3), g["start"]))
+    return games
+
+
+def details(game_id):
+    """Leaders, last plays and win probability for one game (ESPN summary feed)."""
+    d = fetch(f"{BASE}/summary?event={game_id}", "summary-" + game_id)
+    if not d:
+        return None
+    comp = (d.get("header", {}).get("competitions") or [{}])[0]
+    game = game_from(game_id, comp, comp.get("status", {}), comp.get("date"))
+    leaders = []
+    for team in d.get("leaders") or []:
+        for cat in (team.get("leaders") or [])[:3]:
+            top = (cat.get("leaders") or [{}])[0]
+            if top:
+                leaders.append({"team": team.get("team", {}).get("abbreviation", ""),
+                                "stat": cat.get("shortDisplayName") or cat.get("displayName", ""),
+                                "player": top.get("athlete", {}).get("shortName") or top.get("athlete", {}).get("displayName", ""),
+                                "value": top.get("displayValue", "")})
+    plays = [p.get("text", "") for p in (d.get("plays") or [])[-5:]][::-1]
+    wp = (d.get("winprobability") or [{}])[-1].get("homeWinPercentage")
+    game.update({"leaders": leaders, "plays": plays, "homeWinPct": round(wp * 100) if wp is not None else None})
+    return game
+
+
+def parse_follow(text):
+    text = text.strip()
+    m = re.search(r"gameId/(\d+)", text) or re.fullmatch(r"(\d{6,})", text)
+    if m:
+        return "games", m.group(1)
+    if re.fullmatch(r"[A-Za-z]{2,4}", text):
+        return "teams", text.upper()
+    return None, None
+
+
+def is_followed(g, fol):
+    return g["id"] in fol["games"] or g["away"].get("abbr") in fol["teams"] or g["home"].get("abbr") in fol["teams"]
+
+
+def summary():
+    fol = load_follow()
+    games = scoreboard()
+    for g in games:
+        g["followed"] = is_followed(g, fol)
+    today_ids = {g["id"] for g in games}
+    followed = []
+    keep = []
+    for g in games:
+        if g["followed"]:
+            followed.append(details(g["id"]) or g)
+    # Followed games that aren't on today's board (pasted links for other days).
+    for gid in fol["games"]:
+        if gid in today_ids:
+            keep.append(gid)
+            continue
+        g = details(gid)
+        if not g:
+            keep.append(gid)
+            continue
+        started = time.mktime(time.strptime(g["start"][:16], "%Y-%m-%dT%H:%M")) if g["start"] else time.time()
+        if g["state"] == "post" and time.time() - started > FINAL_KEEP:
+            continue   # finished long ago: stop following it
+        keep.append(gid)
+        g["followed"] = True
+        followed.append(g)
+    if keep != fol["games"]:
+        fol["games"] = keep
+        save_follow(fol)
+    for g in followed:
+        g["followed"] = True
+    any_live = any(g["state"] == "in" for g in games + followed)
+    return {"games": games, "followed": followed, "teams": fol["teams"], "anyLive": any_live,
+            "liveCount": sum(1 for g in games if g["state"] == "in")}
+
+
+def short(g):
+    a, h = g["away"], g["home"]
+    if g["state"] == "pre":
+        return f"{a.get('abbr')} @ {h.get('abbr')} {g['detail']}"
+    return f"{a.get('abbr')} {a.get('score')}–{h.get('score')} {h.get('abbr')} · {g['detail']}"
+
+
+def main():
+    mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    arg = " ".join(sys.argv[2:])
+    if mode in ("--follow", "--unfollow"):
+        kind, value = parse_follow(arg)
+        if not kind:
+            print(json.dumps({"ok": False, "message": "Paste an ESPN game link (…/gameId/123…) or a team like LAL."}))
+            return
+        fol = load_follow()
+        if mode == "--follow":
+            if value not in fol[kind]:
+                fol[kind].append(value)
+            msg = f"Following {'team ' + value if kind == 'teams' else 'game ' + value}"
+        else:
+            fol[kind] = [v for v in fol[kind] if v != value]
+            msg = f"Stopped following {value}"
+        save_follow(fol)
+        print(json.dumps({"ok": True, "message": msg, **summary()}))
+        return
+    s = summary()
+    if mode == "--json":
+        print(json.dumps(s))
+    elif s["followed"]:
+        print("🏀 " + " | ".join(short(g) for g in s["followed"][:2]))
+    else:
+        print(f"🏀 {s['liveCount']} live" if s["liveCount"] else "🏀 NBA")
+
+
+if __name__ == "__main__":
+    main()
