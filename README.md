@@ -7,6 +7,7 @@ anyone else. Each widget lives in its own folder with its own README and install
 |---|---|
 | [Solana Watchlist](solana-watchlist/) | Market cap and 5m/1h/6h/24h price change for Solana tokens you pick, from DexScreener |
 | [Solana Wallet](solana-wallet/) | Value of your Solana wallets on the panel; SOL and every token held in the popup |
+| [NBA Scores](nba-scores/) | Live scores of the NBA games and teams you follow on the panel; every game of the day in the popup |
 
 ## Installing any widget
 

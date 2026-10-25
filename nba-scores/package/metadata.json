@@ -1,0 +1,15 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Jesper Dote", "Email": "jesperdote@gmail.com" }],
+        "Category": "Online Services",
+        "Description": "Live NBA scores: the games you follow on the panel (star a game, follow a team, or paste an ESPN game link), every game of the day in the popup",
+        "Icon": "games-highscores",
+        "Id": "com.github.jesperdote.nbascores",
+        "License": "MIT",
+        "Name": "NBA Scores",
+        "Version": "1.0.0",
+        "Website": "https://github.com/jesperdote/plasma-widgets"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
