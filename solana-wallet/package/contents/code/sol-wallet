@@ -7,7 +7,8 @@ public and keyless. Wallets: ~/.config/sol-wallet/wallets, one address per line,
 label after it. A different RPC endpoint (e.g. a free Helius/QuickNode URL, if the public
 one rate-limits you) can go in ~/.config/sol-wallet/rpc or $SOL_RPC_URL.
 
-Balances are cached for 60 s and prices for 30 s, so calling this often is cheap.
+Balances are cached for 60 s and prices for 30 s, so calling this often is cheap. USD
+exchange rates (for showing values in e.g. PHP) come from open.er-api.com, cached for 6 h.
 
   sol-wallet                 one-line summary, e.g. "👛 $1,234 ▲2.1%"
   sol-wallet --json          everything the widget shows
@@ -26,11 +27,13 @@ RPC_FILE = os.path.join(CONF_DIR, "rpc")
 CACHE = os.path.expanduser("~/.cache/sol-wallet.json")
 DEFAULT_RPC = "https://api.mainnet-beta.solana.com"
 TOKEN_SEARCH = "https://lite-api.jup.ag/tokens/v2/search?query={}"
+FX_API = "https://open.er-api.com/v6/latest/USD"  # free, no key, updated daily
 TOKEN_PROGRAMS = ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",   # SPL Token
                   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")   # Token-2022
 SOL_MINT = "So11111111111111111111111111111111111111112"
 BALANCE_MAX_AGE = 60
 PRICE_MAX_AGE = 30
+FX_MAX_AGE = 6 * 3600
 ADDRESS_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")  # base58
 UA = {"User-Agent": "sol-wallet"}
 
@@ -108,6 +111,16 @@ def token_info(mints):
     return info
 
 
+def fx_rates():
+    """{currency: units per 1 USD}."""
+    req = urllib.request.Request(FX_API, headers=UA)
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        d = json.load(resp)
+    if d.get("result") != "success":
+        raise RuntimeError(d.get("error-type", "exchange rate lookup failed"))
+    return d["rates"]
+
+
 def load_cache():
     try:
         with open(CACHE) as f:
@@ -147,6 +160,11 @@ def refresh(wallets, force=False):
             cache["tokens"] = {"at": now, "info": token_info(mints)}
         except Exception as e:
             errors["prices"] = str(e)
+    if force or now - cache.get("fx", {}).get("at", 0) >= FX_MAX_AGE:
+        try:
+            cache["fx"] = {"at": now, "rates": fx_rates()}
+        except Exception as e:
+            errors["fx"] = str(e)  # values stay in USD until a rate is known
     cache["errors"] = errors
     save_cache(cache)
     return cache
@@ -204,6 +222,10 @@ def summary(wallets, cache):
         "totalUsd": grand,
         "change24h": (grand / grand_prev - 1) * 100 if grand_prev else None,
         "priceError": cache.get("errors", {}).get("prices", ""),
+        "sol": {"price": info.get(SOL_MINT, {}).get("price"), "change24h": info.get(SOL_MINT, {}).get("change24h")}
+               if info.get(SOL_MINT, {}).get("price") else None,
+        # Units per 1 USD for the currencies the widget offers; missing until first fetched.
+        "fx": {c: r for c, r in cache.get("fx", {}).get("rates", {}).items() if c in ("USD", "PHP")},
     }
 
 
