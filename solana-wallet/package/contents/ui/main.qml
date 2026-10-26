@@ -13,6 +13,12 @@ import org.kde.plasma.plasma5support as P5Support
 PlasmoidItem {
     id: root
 
+    // Zoom for the popup / window contents (70-180%), like a word processor's zoom.
+    readonly property real zoom: Plasmoid.configuration.zoom
+    function setZoom(z) {
+        Plasmoid.configuration.zoom = Math.round(Math.max(0.7, Math.min(1.8, z)) * 10) / 10
+    }
+
     // Run through python3 so it works even if the package was unpacked without the exec bit.
     readonly property string backend: "python3 '" + decodeURIComponent(Qt.resolvedUrl("../code/sol-wallet").toString().replace("file://", "")) + "'"
     readonly property int panelFontSize: 14
@@ -26,6 +32,12 @@ PlasmoidItem {
     property real totalUsd: 0
     property var change24h: null
     property string priceError: ""
+    property var fx: ({})  // units per 1 USD, from the backend
+    property var sol: null  // {price (USD), change24h} for the SOL readout
+    readonly property var currencySymbols: ({ USD: "$", PHP: "₱" })
+    // Fall back to USD until the exchange rate has been fetched once.
+    readonly property string currency: fx[Plasmoid.configuration.currency] ? Plasmoid.configuration.currency : "USD"
+    readonly property string sym: currencySymbols[currency] || "$"
     property string message: ""
     property bool messageIsError: false
     property bool busy: false
@@ -54,16 +66,18 @@ PlasmoidItem {
         return (c >= 0 ? "▲" : "▼") + (a < 10 ? a.toFixed(1) : a.toFixed(0)) + "%"
     }
 
-    function fmtUsd(v) {
-        if (v === undefined || v === null)
+    // Values arrive in USD; shown in the chosen currency.
+    function fmtMoney(usd) {
+        if (usd === undefined || usd === null)
             return "no price"
+        const v = usd * (fx[currency] || 1)
         if (v >= 1000)
-            return "$" + Math.round(v).toLocaleString(Qt.locale("en_US"), "f", 0)
-        return "$" + v.toFixed(2)
+            return sym + Math.round(v).toLocaleString(Qt.locale("en_US"), "f", 0)
+        return sym + v.toFixed(2)
     }
 
-    function shownUsd(v) {
-        return hideValues && v !== null && v !== undefined ? "$•••" : fmtUsd(v)
+    function shownMoney(v) {
+        return hideValues && v !== null && v !== undefined ? sym + "•••" : fmtMoney(v)
     }
 
     function shownAmount(a) {
@@ -115,6 +129,8 @@ PlasmoidItem {
             totalUsd = d.totalUsd
             change24h = d.change24h
             priceError = d.priceError || ""
+            fx = d.fx || {}
+            sol = d.sol || sol
             return d
         } catch (e) {
             return null
@@ -161,7 +177,7 @@ PlasmoidItem {
     }
 
     toolTipMainText: "Solana wallets"
-    toolTipSubText: wallets.length ? wallets.map(w => w.label + ": " + shownUsd(w.totalUsd)).join("\n") + "\nClick for holdings"
+    toolTipSubText: wallets.length ? wallets.map(w => w.label + ": " + shownMoney(w.totalUsd)).join("\n") + "\nClick for holdings"
                                    : "Click to add a wallet"
 
     compactRepresentation: MouseArea {
@@ -191,7 +207,7 @@ PlasmoidItem {
             anchors.centerIn: parent
             spacing: Kirigami.Units.smallSpacing * 2
             PC3.Label {
-                text: root.wallets.length ? "👛 " + root.shownUsd(root.totalUsd) : "👛 add wallet"
+                text: root.wallets.length ? "👛 " + root.shownMoney(root.totalUsd) : "👛 add wallet"
                 font.pointSize: root.panelFontSize
             }
             ChangeLabel {
@@ -206,6 +222,14 @@ PlasmoidItem {
     // The popup's contents, also used for the movable window below.
     component MainView: PlasmaExtras.Representation {
         property bool inWindow: false
+
+        WheelHandler {
+            acceptedModifiers: Qt.ControlModifier
+            onWheel: event => root.setZoom(root.zoom + (event.angleDelta.y > 0 ? 0.1 : -0.1))
+        }
+        Shortcut { sequences: [StandardKey.ZoomIn, "Ctrl+="]; onActivated: root.setZoom(root.zoom + 0.1) }
+        Shortcut { sequence: StandardKey.ZoomOut; onActivated: root.setZoom(root.zoom - 0.1) }
+        Shortcut { sequence: "Ctrl+0"; onActivated: root.setZoom(1) }
         Layout.preferredWidth: Kirigami.Units.gridUnit * 32
         Layout.preferredHeight: Kirigami.Units.gridUnit * 26
         collapseMarginsHint: true
@@ -217,11 +241,21 @@ PlasmoidItem {
                     level: 3
                     text: "Solana wallets"
                 }
+                PC3.Label {
+                    visible: root.sol !== null
+                    opacity: 0.8
+                    text: root.sol ? "·  SOL " + root.fmtMoney(root.sol.price) : ""
+                }
+                ChangeLabel {
+                    visible: root.sol !== null && root.sol.change24h !== null && root.sol.change24h !== undefined
+                    text: root.sol ? root.fmtChange(root.sol.change24h) : ""
+                    wanted: root.changeColor(root.sol ? root.sol.change24h : null)
+                }
                 Item { Layout.fillWidth: true }
                 Kirigami.Heading {
-                    level: 3
+                                    level: 3
                     visible: root.wallets.length > 0
-                    text: root.shownUsd(root.totalUsd)
+                    text: root.shownMoney(root.totalUsd)
                 }
                 ChangeLabel {
                     visible: root.change24h !== null
@@ -232,6 +266,26 @@ PlasmoidItem {
                     icon.name: root.hideValues ? "layer-visible-off" : "layer-visible-on"
                     onClicked: root.toggleHideValues()
                     PC3.ToolTip.text: root.hideValues ? "Show values" : "Hide values (also: middle-click the panel)"
+                    PC3.ToolTip.visible: hovered
+                }
+                PC3.ToolButton {
+                    icon.name: "zoom-out"
+                    enabled: root.zoom > 0.7
+                    onClicked: root.setZoom(root.zoom - 0.1)
+                    PC3.ToolTip.text: "Zoom out (Ctrl+−, Ctrl+wheel)"
+                    PC3.ToolTip.visible: hovered
+                }
+                PC3.ToolButton {
+                    text: Math.round(root.zoom * 100) + "%"
+                    onClicked: root.setZoom(1)
+                    PC3.ToolTip.text: "Reset zoom (Ctrl+0)"
+                    PC3.ToolTip.visible: hovered
+                }
+                PC3.ToolButton {
+                    icon.name: "zoom-in"
+                    enabled: root.zoom < 1.8
+                    onClicked: root.setZoom(root.zoom + 0.1)
+                    PC3.ToolTip.text: "Zoom in (Ctrl+=, Ctrl+wheel)"
                     PC3.ToolTip.visible: hovered
                 }
                 PC3.ToolButton {
@@ -262,6 +316,15 @@ PlasmoidItem {
                     onToggled: Plasmoid.configuration.hideSmall = checked
                 }
                 Item { Layout.fillWidth: true }
+                PC3.Label {
+                    text: "Currency:"
+                }
+                PC3.ComboBox {
+                    model: ["USD", "PHP"]
+                    currentIndex: Math.max(0, model.indexOf(Plasmoid.configuration.currency))
+                    onActivated: index => Plasmoid.configuration.currency = model[index]
+                }
+                Item { Layout.fillWidth: true }
                 PC3.CheckBox {
                     text: "Solid background"
                     checked: Plasmoid.configuration.solidBackground
@@ -280,6 +343,7 @@ PlasmoidItem {
             PC3.ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize * root.zoom  // zoom: data only
 
                 ListView {
                     id: list
@@ -313,23 +377,23 @@ PlasmoidItem {
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
                                     font.bold: true
-                                    text: walletItem.modelData.label + "  ·  " + root.shownUsd(walletItem.modelData.totalUsd)
+                                    text: walletItem.modelData.label + "  ·  " + root.shownMoney(walletItem.modelData.totalUsd)
                                 }
                                 RowLayout {
                                     PC3.Label {
                                         opacity: 0.6
-                                        font: Kirigami.Theme.smallFont
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * root.zoom
                                         text: walletItem.modelData.short
                                     }
                                     ChangeLabel {
                                         visible: walletItem.modelData.change24h !== null
-                                        font: Kirigami.Theme.smallFont
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * root.zoom
                                         text: root.fmtChange(walletItem.modelData.change24h) + " 24h"
                                         wanted: root.changeColor(walletItem.modelData.change24h)
                                     }
                                     PC3.Label {
                                         visible: walletItem.modelData.error !== ""
-                                        font: Kirigami.Theme.smallFont
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * root.zoom
                                         color: Kirigami.Theme.neutralTextColor
                                         text: walletItem.modelData.loaded ? "(not updated: RPC error)" : "(couldn't load: RPC error)"
                                     }
@@ -369,8 +433,8 @@ PlasmoidItem {
                                 spacing: Kirigami.Units.largeSpacing
 
                                 Item {
-                                    implicitWidth: Kirigami.Units.iconSizes.medium
-                                    implicitHeight: Kirigami.Units.iconSizes.medium
+                                    implicitWidth: Kirigami.Units.iconSizes.medium * root.zoom
+                                    implicitHeight: Kirigami.Units.iconSizes.medium * root.zoom
                                     Image {
                                         id: logo
                                         anchors.fill: parent
@@ -405,7 +469,7 @@ PlasmoidItem {
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
                                         opacity: 0.6
-                                        font: Kirigami.Theme.smallFont
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * root.zoom
                                         text: root.shownAmount(holding.modelData.amount) + (holding.modelData.name ? "  ·  " + holding.modelData.name : "")
                                     }
                                 }
@@ -413,13 +477,13 @@ PlasmoidItem {
                                     spacing: 0
                                     PC3.Label {
                                         Layout.alignment: Qt.AlignRight
-                                        text: root.shownUsd(holding.modelData.usd)
+                                        text: root.shownMoney(holding.modelData.usd)
                                         opacity: holding.modelData.usd === null ? 0.5 : 1
                                     }
                                     ChangeLabel {
                                         Layout.alignment: Qt.AlignRight
                                         visible: holding.modelData.change24h !== null
-                                        font: Kirigami.Theme.smallFont
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize * root.zoom
                                         text: root.fmtChange(holding.modelData.change24h)
                                         wanted: root.changeColor(holding.modelData.change24h)
                                     }
@@ -431,7 +495,7 @@ PlasmoidItem {
                             Layout.topMargin: Kirigami.Units.smallSpacing
                             visible: walletItem.modelData.holdings.length > walletItem.shown.length
                             opacity: 0.5
-                            font: Kirigami.Theme.smallFont
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize * root.zoom
                             text: (walletItem.modelData.holdings.length - walletItem.shown.length) + " small or unpriced balances hidden"
                         }
                     }
