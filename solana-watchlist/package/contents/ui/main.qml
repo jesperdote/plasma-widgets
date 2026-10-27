@@ -241,6 +241,25 @@ PlasmoidItem {
         message = "Copied the " + symbol + " token address (CA)"
         messageIsError = false
     }
+    // Small inline "open on DexScreener" icon, next to the copy icon.
+    component DexLink: Kirigami.Icon {
+        property string address
+        property string url: "https://dexscreener.com/solana/" + address
+        source: "internet-web-browser"
+        Layout.preferredWidth: Math.round(Kirigami.Units.iconSizes.small * 0.75 * root.zoom)
+        Layout.preferredHeight: Layout.preferredWidth
+        opacity: dexArea.containsMouse ? 1 : 0.5
+        MouseArea {
+            id: dexArea
+            anchors.fill: parent
+            anchors.margins: -Kirigami.Units.smallSpacing
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Qt.openUrlExternally(parent.url)
+        }
+        PC3.ToolTip.text: "Open on DexScreener"
+        PC3.ToolTip.visible: dexArea.containsMouse
+    }
     component CopyCA: Kirigami.Icon {
         property string address
         property string symbol
@@ -677,6 +696,7 @@ PlasmoidItem {
                                         text: item.modelData.found ? item.modelData.name + " (" + item.modelData.symbol + ")" : item.modelData.symbol
                                     }
                                     CopyCA { address: item.modelData.address; symbol: item.modelData.symbol }
+                                    DexLink { address: item.modelData.address; url: item.modelData.url }
                                     PC3.Label {
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
@@ -736,12 +756,6 @@ PlasmoidItem {
                                 enabled: !root.busy
                                 onClicked: root.change(item.modelData.hidden ? "--show" : "--hide", item.modelData.address)
                                 PC3.ToolTip.text: item.modelData.hidden ? "Show on the panel" : "Hide from the panel"
-                                PC3.ToolTip.visible: hovered
-                            }
-                            PC3.ToolButton {
-                                icon.name: "internet-web-browser"
-                                onClicked: Qt.openUrlExternally(item.modelData.url)
-                                PC3.ToolTip.text: "Open on DexScreener"
                                 PC3.ToolTip.visible: hovered
                             }
                             PC3.ToolButton {
@@ -941,6 +955,7 @@ PlasmoidItem {
                                         spacing: Kirigami.Units.smallSpacing
                                         PC3.Label { font.bold: true; text: pos.modelData.symbol }
                                         CopyCA { address: pos.modelData.mint; symbol: pos.modelData.symbol }
+                                        DexLink { address: pos.modelData.mint }
                                         PC3.Label {
                                             font.bold: true
                                             text: pos.modelData.amount > 0 ? "·  " + root.fmtQty(pos.modelData.amount) : "·  closed"
