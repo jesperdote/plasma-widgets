@@ -140,6 +140,15 @@ def data(tokens):
     return live, max(at, jup_at)
 
 
+def mc3(v):
+    """Market cap with 3 decimals for the widget, e.g. $46.512M, $455.123K."""
+    v = float(v or 0)
+    for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
+        if v >= div:
+            return f"${v / div:.3f}{unit}"
+    return f"${v:.2f}"
+
+
 def money(v):
     v = float(v or 0)
     for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
@@ -360,7 +369,7 @@ def as_json(tokens, pairs, at, alerts=None):
             "name": t.get("name", ""),
             "found": bool(p),
             "hidden": addr in HIDDEN,
-            "marketCap": money(p.get("marketCap") or p.get("fdv")) if p else "",
+            "marketCap": mc3(p.get("marketCap") or p.get("fdv")) if p else "",
             "price": p.get("priceUsd", "") if p else "",
             "changes": (p or {}).get("priceChange") or {},
             "url": (p or {}).get("url") or f"https://dexscreener.com/solana/{addr}",
