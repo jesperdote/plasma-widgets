@@ -710,8 +710,12 @@ PlasmoidItem {
                             }
                             PC3.ToolButton {
                                 icon.name: "edit-copy"
-                                onClicked: { clip.text = item.modelData.address; clip.selectAll(); clip.copy() }
-                                PC3.ToolTip.text: "Copy address"
+                                onClicked: {
+                                    clip.text = item.modelData.address; clip.selectAll(); clip.copy()
+                                    root.message = "Copied the " + item.modelData.symbol + " token address (CA)"
+                                    root.messageIsError = false
+                                }
+                                PC3.ToolTip.text: "Copy token address (CA)"
                                 PC3.ToolTip.visible: hovered
                             }
                             PC3.ToolButton {
@@ -937,6 +941,16 @@ PlasmoidItem {
                                     text: "Sell all"
                                     enabled: !root.busy
                                     onClicked: { root.tradingFor = ""; root.requestQuote("sell", pos.modelData.mint, 100) }
+                                }
+                                PC3.ToolButton {
+                                    icon.name: "edit-copy"
+                                    onClicked: {
+                                        clip.text = pos.modelData.mint; clip.selectAll(); clip.copy()
+                                        root.message = "Copied the " + pos.modelData.symbol + " token address (CA)"
+                                        root.messageIsError = false
+                                    }
+                                    PC3.ToolTip.text: "Copy token address (CA)"
+                                    PC3.ToolTip.visible: hovered
                                 }
                             }
                             QuoteConfirm {
