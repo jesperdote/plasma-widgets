@@ -488,6 +488,18 @@ PlasmoidItem {
                                         wanted: root.changeColor(holding.modelData.change24h)
                                     }
                                 }
+                                PC3.ToolButton {
+                                    // SOL itself has no token address worth copying.
+                                    visible: !holding.modelData.isSol
+                                    icon.name: "edit-copy"
+                                    onClicked: {
+                                        clip.text = holding.modelData.mint; clip.selectAll(); clip.copy()
+                                        root.message = "Copied the " + holding.modelData.symbol + " token address (CA)"
+                                        root.messageIsError = false
+                                    }
+                                    PC3.ToolTip.text: "Copy token address (CA)"
+                                    PC3.ToolTip.visible: hovered
+                                }
                             }
                         }
 
