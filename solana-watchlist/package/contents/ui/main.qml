@@ -234,6 +234,32 @@ PlasmoidItem {
 
     signal added()
 
+    // Small inline "copy token address (CA)" icon, next to a token's name/ticker.
+    TextEdit { id: rootClip; visible: false }
+    function copyCA(address, symbol) {
+        rootClip.text = address; rootClip.selectAll(); rootClip.copy(); rootClip.text = ""
+        message = "Copied the " + symbol + " token address (CA)"
+        messageIsError = false
+    }
+    component CopyCA: Kirigami.Icon {
+        property string address
+        property string symbol
+        source: "edit-copy"
+        Layout.preferredWidth: Math.round(Kirigami.Units.iconSizes.small * 0.75 * root.zoom)
+        Layout.preferredHeight: Layout.preferredWidth
+        opacity: copyArea.containsMouse ? 1 : 0.5
+        MouseArea {
+            id: copyArea
+            anchors.fill: parent
+            anchors.margins: -Kirigami.Units.smallSpacing  // a slightly bigger target than the icon
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.copyCA(parent.address, parent.symbol)
+        }
+        PC3.ToolTip.text: "Copy token address (CA)"
+        PC3.ToolTip.visible: copyArea.containsMouse
+    }
+
     // Alert sound choice (the backend plays it when an alert fires).
     property var soundChoices: [{ name: "None (silent)", path: "none" }]
     property string alertSound: ""
@@ -640,13 +666,23 @@ PlasmoidItem {
                                 Layout.preferredWidth: 0
                                 clip: true
                                 spacing: 0
-                                PC3.Label {
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                    font.bold: true
-                                    text: item.modelData.found
-                                          ? item.modelData.name + " (" + item.modelData.symbol + ") · MC " + item.modelData.marketCap
-                                          : item.modelData.symbol + " · no DexScreener pair"
+                                    spacing: Kirigami.Units.smallSpacing
+                                    PC3.Label {
+                                        Layout.maximumWidth: implicitWidth
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                        font.bold: true
+                                        text: item.modelData.found ? item.modelData.name + " (" + item.modelData.symbol + ")" : item.modelData.symbol
+                                    }
+                                    CopyCA { address: item.modelData.address; symbol: item.modelData.symbol }
+                                    PC3.Label {
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                        font.bold: true
+                                        text: item.modelData.found ? "· MC " + item.modelData.marketCap : "· no DexScreener pair"
+                                    }
                                 }
                                 RowLayout {
                                     spacing: Kirigami.Units.largeSpacing
@@ -706,16 +742,6 @@ PlasmoidItem {
                                 icon.name: "internet-web-browser"
                                 onClicked: Qt.openUrlExternally(item.modelData.url)
                                 PC3.ToolTip.text: "Open on DexScreener"
-                                PC3.ToolTip.visible: hovered
-                            }
-                            PC3.ToolButton {
-                                icon.name: "edit-copy"
-                                onClicked: {
-                                    clip.text = item.modelData.address; clip.selectAll(); clip.copy()
-                                    root.message = "Copied the " + item.modelData.symbol + " token address (CA)"
-                                    root.messageIsError = false
-                                }
-                                PC3.ToolTip.text: "Copy token address (CA)"
                                 PC3.ToolTip.visible: hovered
                             }
                             PC3.ToolButton {
@@ -911,9 +937,14 @@ PlasmoidItem {
                                     Layout.preferredWidth: 0
                                     clip: true
                                     spacing: 0
-                                    PC3.Label {
-                                        font.bold: true
-                                        text: pos.modelData.symbol + (pos.modelData.amount > 0 ? "  ·  " + root.fmtQty(pos.modelData.amount) : "  ·  closed")
+                                    RowLayout {
+                                        spacing: Kirigami.Units.smallSpacing
+                                        PC3.Label { font.bold: true; text: pos.modelData.symbol }
+                                        CopyCA { address: pos.modelData.mint; symbol: pos.modelData.symbol }
+                                        PC3.Label {
+                                            font.bold: true
+                                            text: pos.modelData.amount > 0 ? "·  " + root.fmtQty(pos.modelData.amount) : "·  closed"
+                                        }
                                     }
                                     PC3.Label {
                                         opacity: 0.7
@@ -941,16 +972,6 @@ PlasmoidItem {
                                     text: "Sell all"
                                     enabled: !root.busy
                                     onClicked: { root.tradingFor = ""; root.requestQuote("sell", pos.modelData.mint, 100) }
-                                }
-                                PC3.ToolButton {
-                                    icon.name: "edit-copy"
-                                    onClicked: {
-                                        clip.text = pos.modelData.mint; clip.selectAll(); clip.copy()
-                                        root.message = "Copied the " + pos.modelData.symbol + " token address (CA)"
-                                        root.messageIsError = false
-                                    }
-                                    PC3.ToolTip.text: "Copy token address (CA)"
-                                    PC3.ToolTip.visible: hovered
                                 }
                             }
                             QuoteConfirm {
