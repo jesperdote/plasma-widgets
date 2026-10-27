@@ -45,6 +45,32 @@ PlasmoidItem {
 
     signal added()
 
+    // Small inline "copy token address (CA)" icon, next to a token's name/ticker.
+    TextEdit { id: rootClip; visible: false }
+    function copyCA(address, symbol) {
+        rootClip.text = address; rootClip.selectAll(); rootClip.copy(); rootClip.text = ""
+        message = "Copied the " + symbol + " token address (CA)"
+        messageIsError = false
+    }
+    component CopyCA: Kirigami.Icon {
+        property string address
+        property string symbol
+        source: "edit-copy"
+        Layout.preferredWidth: Math.round(Kirigami.Units.iconSizes.small * 0.75 * root.zoom)
+        Layout.preferredHeight: Layout.preferredWidth
+        opacity: copyArea.containsMouse ? 1 : 0.5
+        MouseArea {
+            id: copyArea
+            anchors.fill: parent
+            anchors.margins: -Kirigami.Units.smallSpacing  // a slightly bigger target than the icon
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.copyCA(parent.address, parent.symbol)
+        }
+        PC3.ToolTip.text: "Copy token address (CA)"
+        PC3.ToolTip.visible: copyArea.containsMouse
+    }
+
     // Panel Colorizer repaints every Text in the panel with its foreground colour whenever a
     // widget's children change; put the red/green back.
     component ChangeLabel: PC3.Label {
@@ -459,11 +485,16 @@ PlasmoidItem {
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 0
-                                    PC3.Label {
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        elide: Text.ElideRight
-                                        font.bold: true
-                                        text: holding.modelData.symbol + (holding.modelData.verified ? "  ✓" : "")
+                                        spacing: Kirigami.Units.smallSpacing
+                                        PC3.Label {
+                                            font.bold: true
+                                            text: holding.modelData.symbol + (holding.modelData.verified ? "  ✓" : "")
+                                        }
+                                        // SOL itself has no token address worth copying.
+                                        CopyCA { visible: !holding.modelData.isSol; address: holding.modelData.mint; symbol: holding.modelData.symbol }
+                                        Item { Layout.fillWidth: true }
                                     }
                                     PC3.Label {
                                         Layout.fillWidth: true
@@ -487,18 +518,6 @@ PlasmoidItem {
                                         text: root.fmtChange(holding.modelData.change24h)
                                         wanted: root.changeColor(holding.modelData.change24h)
                                     }
-                                }
-                                PC3.ToolButton {
-                                    // SOL itself has no token address worth copying.
-                                    visible: !holding.modelData.isSol
-                                    icon.name: "edit-copy"
-                                    onClicked: {
-                                        clip.text = holding.modelData.mint; clip.selectAll(); clip.copy()
-                                        root.message = "Copied the " + holding.modelData.symbol + " token address (CA)"
-                                        root.messageIsError = false
-                                    }
-                                    PC3.ToolTip.text: "Copy token address (CA)"
-                                    PC3.ToolTip.visible: hovered
                                 }
                             }
                         }
