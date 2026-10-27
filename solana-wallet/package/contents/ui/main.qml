@@ -52,6 +52,25 @@ PlasmoidItem {
         message = "Copied the " + symbol + " token address (CA)"
         messageIsError = false
     }
+    // Small inline "open on DexScreener" icon, next to the copy icon.
+    component DexLink: Kirigami.Icon {
+        property string address
+        property string url: "https://dexscreener.com/solana/" + address
+        source: "internet-web-browser"
+        Layout.preferredWidth: Math.round(Kirigami.Units.iconSizes.small * 0.75 * root.zoom)
+        Layout.preferredHeight: Layout.preferredWidth
+        opacity: dexArea.containsMouse ? 1 : 0.5
+        MouseArea {
+            id: dexArea
+            anchors.fill: parent
+            anchors.margins: -Kirigami.Units.smallSpacing
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Qt.openUrlExternally(parent.url)
+        }
+        PC3.ToolTip.text: "Open on DexScreener"
+        PC3.ToolTip.visible: dexArea.containsMouse
+    }
     component CopyCA: Kirigami.Icon {
         property string address
         property string symbol
@@ -494,6 +513,7 @@ PlasmoidItem {
                                         }
                                         // SOL itself has no token address worth copying.
                                         CopyCA { visible: !holding.modelData.isSol; address: holding.modelData.mint; symbol: holding.modelData.symbol }
+                                        DexLink { visible: !holding.modelData.isSol; address: holding.modelData.mint }
                                         Item { Layout.fillWidth: true }
                                     }
                                     PC3.Label {
