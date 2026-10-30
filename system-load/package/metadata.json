@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Jesper Dote",
+                "Email": "jesperdote@gmail.com"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "CPU (all cores) and RAM usage on the panel, stacked with icons and colour-coded; click opens System Monitor",
+        "Icon": "cpu",
+        "Id": "com.github.jesperdote.systemload",
+        "License": "MIT",
+        "Name": "CPU & RAM",
+        "Version": "1.0.0",
+        "Website": "https://github.com/jesperdote/plasma-widgets"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
