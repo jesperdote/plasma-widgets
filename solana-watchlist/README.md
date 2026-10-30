@@ -34,6 +34,15 @@ All tokens go in one request per source, well inside both rate limits (Jupiter's
 tier allows about 5 requests per 10 seconds). If Jupiter is unreachable or rate-limited,
 the widget falls back to DexScreener's price.
 
+- **Alert sound:** pick it in the popup (any sound theme file, or your own in
+  `~/.local/share/sounds`), preview it with ▶, or choose None.
+- **SOL price** and its 24h change in the popup's title.
+- **Zoom** the data in the popup or window (Ctrl+wheel, Ctrl+=/−/0, or the header buttons).
+- **Optional trading:** if a separate trading backend is installed at `~/bin/sol-trade`, each token
+  gets Buy/Sell buttons (quote, then confirm), and the popup gains Positions with P&L, the trading
+  wallet's balance, key export and reclaiming empty token accounts; the panel can show open P&L.
+  That backend isn't part of this repo, and without it none of this appears.
+
 ## Requirements
 
 - KDE Plasma 6

@@ -8,6 +8,10 @@
     <entry name="hideSmall" type="Bool">
       <default>true</default>
     </entry>
+    <!-- Currency values are shown in (USD or PHP); converted with a daily USD rate -->
+    <entry name="currency" type="String">
+      <default>USD</default>
+    </entry>
     <!-- Privacy: mask dollar values and amounts on the panel and in the popup -->
     <entry name="hideValues" type="Bool">
       <default>false</default>
@@ -15,6 +19,10 @@
     <!-- Draw a solid rounded background behind the panel text (off = transparent) -->
     <entry name="solidBackground" type="Bool">
       <default>false</default>
+    </entry>
+    <!-- Zoom of the popup / window contents, 0.7-1.8 -->
+    <entry name="zoom" type="Double">
+      <default>1.0</default>
     </entry>
   </group>
 </kcfg>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- RAM stick: board with four chips cut out, a notch, and contact pins -->
+  <path fill="#000" fill-rule="evenodd" d="M2 6h20v10H13v-1.5h-2V16H2z M4 8.5v4h3v-4z M8.5 8.5v4h3v-4z M12.5 8.5v4h3v-4z M17 8.5v4h3v-4z"/>
+  <path fill="#000" d="M3 17h1.5v2H3zM6 17h1.5v2H6zM9 17h1.5v2H9zM13.5 17H15v2h-1.5zM16.5 17H18v2h-1.5zM19.5 17H21v2h-1.5z"/>
+</svg>

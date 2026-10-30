@@ -12,5 +12,13 @@
     <entry name="solidBackground" type="Bool">
       <default>false</default>
     </entry>
+    <!-- Zoom of the popup / window contents, 0.7-1.8 -->
+    <entry name="zoom" type="Double">
+      <default>1.0</default>
+    </entry>
+    <!-- Open-position P&L on the panel: pct, sol, usd, sol+pct or usd+pct -->
+    <entry name="pnlDisplay" type="String">
+      <default>usd+pct</default>
+    </entry>
   </group>
 </kcfg>

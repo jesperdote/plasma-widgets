@@ -34,6 +34,11 @@ The default RPC is Solana's public `https://api.mainnet-beta.solana.com`, which 
 rate-limited. If you see "RPC error", put a free endpoint from Helius, QuickNode or similar
 in `~/.config/sol-wallet/rpc` (just the URL), or set `$SOL_RPC_URL`.
 
+- **Currency:** show values in USD or PHP (Philippine peso), converted with a daily USD rate from
+  open.er-api.com (free, no key).
+- **SOL price** and its 24h change in the popup's header, in the chosen currency.
+- **Zoom** the data in the popup or window (Ctrl+wheel, Ctrl+=/−/0, or the header buttons).
+
 ## Requirements
 
 - KDE Plasma 6

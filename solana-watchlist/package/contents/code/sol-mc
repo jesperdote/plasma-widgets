@@ -19,6 +19,7 @@ cap is already past isn't saved.
   sol-mc --json     all tokens as JSON (what the widget reads)
   sol-mc --add / --remove / --hide / --show ADDRESS   change the watchlist, then print --json
   sol-mc --alert ADDRESS above|below AMOUNT|off [...]  set/clear alerts (AMOUNT like 50M, 1.2B)
+  sol-mc --sounds | --set-sound PATH|none | --play PATH   pick / preview the alert sound
 """
 import json
 import os
@@ -30,6 +31,9 @@ import urllib.request
 
 CONF = os.path.expanduser("~/.config/sol-mc/watchlist")
 ALERTS = os.path.expanduser("~/.config/sol-mc/alerts.json")
+SOUND_SETTING = os.path.expanduser("~/.config/sol-mc/alert-sound")  # a sound file path, or "none"
+SOUND_DIRS = ["/usr/share/sounds/ocean/stereo", os.path.expanduser("~/.local/share/sounds")]
+DEFAULT_SOUND = "/usr/share/sounds/ocean/stereo/message-attention.oga"
 CACHE = os.path.expanduser("~/.cache/sol-mc.json")
 JUP_CACHE = os.path.expanduser("~/.cache/sol-mc-jupiter.json")
 API = "https://api.dexscreener.com/latest/dex/tokens/{}"
@@ -98,23 +102,33 @@ def cached(path, addrs, max_age, fetcher):
     return value, time.time()
 
 
+SOL_MINT = "So11111111111111111111111111111111111111112"
+SOL_INFO = {}  # SOL's own price and 24h change, filled by data() for the panel's SOL readout
+
+
 def fetch_jupiter(addresses):
-    """{address: USD price} from Jupiter."""
-    req = urllib.request.Request(JUP_API.format(",".join(addresses)), headers={"User-Agent": "sol-mc"})
+    """{address: [USD price, 24h change %]} from Jupiter; SOL is always asked for too."""
+    ids = list(dict.fromkeys(list(addresses) + [SOL_MINT]))
+    req = urllib.request.Request(JUP_API.format(",".join(ids)), headers={"User-Agent": "sol-mc"})
     with urllib.request.urlopen(req, timeout=5) as resp:
-        return {a: float(v["usdPrice"]) for a, v in json.load(resp).items() if v and v.get("usdPrice")}
+        return {a: [float(v["usdPrice"]), v.get("priceChange24h")]
+                for a, v in json.load(resp).items() if v and v.get("usdPrice")}
 
 
 def data(tokens):
     addrs = [a for a, _ in tokens][:30]
     pairs, at = cached(CACHE, addrs, DS_MAX_AGE, fetch)
     prices, jup_at = cached(JUP_CACHE, addrs, JUP_MAX_AGE, fetch_jupiter)
+    # Older caches hold a bare price per address.
+    prices = {a: (v if isinstance(v, list) else [v, None]) for a, v in prices.items()}
+    if SOL_MINT in prices:
+        SOL_INFO.update(price=prices[SOL_MINT][0], change24h=prices[SOL_MINT][1])
     if not prices or time.time() - jup_at > JUP_STALE:
         return pairs, at
     live = {}
     for addr, p in pairs.items():
         p = dict(p)
-        old, new = float(p.get("priceUsd") or 0), prices.get(addr)
+        old, new = float(p.get("priceUsd") or 0), (prices.get(addr) or [None])[0]
         if old > 0 and new:
             # Supply doesn't change between DexScreener refreshes, so MC scales with price.
             for key in ("marketCap", "fdv"):
@@ -124,6 +138,15 @@ def data(tokens):
             p["live"] = True
         live[addr] = p
     return live, max(at, jup_at)
+
+
+def mc3(v):
+    """Market cap with 3 decimals for the widget, e.g. $46.512M, $455.123K."""
+    v = float(v or 0)
+    for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
+        if v >= div:
+            return f"${v / div:.3f}{unit}"
+    return f"${v:.2f}"
 
 
 def money(v):
@@ -242,13 +265,47 @@ def reached(direction, mc, level):
     return mc >= level if direction == "above" else mc <= level
 
 
+def list_sounds():
+    out = []
+    for d in SOUND_DIRS:
+        try:
+            names = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for n in names:
+            if n.endswith((".oga", ".ogg", ".wav")) and "silent" not in n:
+                out.append({"name": n.rsplit(".", 1)[0].replace("-", " "), "path": os.path.join(d, n)})
+    return out
+
+
+def current_sound():
+    try:
+        with open(SOUND_SETTING) as f:
+            v = f.read().strip()
+        return v if v == "none" or os.path.isfile(v) else DEFAULT_SOUND
+    except OSError:
+        return DEFAULT_SOUND
+
+
+def play(path):
+    """Play a sound without waiting for it (first player found: PipeWire, PulseAudio, libcanberra)."""
+    if not path or path == "none" or not os.path.isfile(path):
+        return
+    for player in (["pw-play"], ["paplay"], ["canberra-gtk-play", "-f"]):
+        try:
+            subprocess.Popen(player + [path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            return
+        except OSError:
+            continue
+
+
 def notify(title, body):
     try:
         subprocess.run(["notify-send", "--app-name=Solana Watchlist", "--icon=office-chart-line",
-                        "--urgency=critical", "--hint=string:sound-name:message-attention", title, body],
-                       timeout=5, check=False)
+                        "--urgency=critical", title, body], timeout=5, check=False)
     except (OSError, subprocess.SubprocessError):
         pass
+    play(current_sound())
 
 
 def check_alerts(tokens, pairs):
@@ -312,19 +369,36 @@ def as_json(tokens, pairs, at, alerts=None):
             "name": t.get("name", ""),
             "found": bool(p),
             "hidden": addr in HIDDEN,
-            "marketCap": money(p.get("marketCap") or p.get("fdv")) if p else "",
+            "marketCap": mc3(p.get("marketCap") or p.get("fdv")) if p else "",
             "price": p.get("priceUsd", "") if p else "",
             "changes": (p or {}).get("priceChange") or {},
             "url": (p or {}).get("url") or f"https://dexscreener.com/solana/{addr}",
             "alerts": {d: {"level": a["level"], "text": money(a["level"])}
                        for d, a in (alerts or {}).get(addr, {}).items()},
         })
-    return {"tokens": out, "age": int(time.time() - at) if at else None}
+    return {"tokens": out, "age": int(time.time() - at) if at else None, "sol": dict(SOL_INFO) or None}
 
 
 def main():
     tokens = read_watchlist()
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    arg = sys.argv[2] if len(sys.argv) > 2 else ""
+    if mode == "--sounds":
+        print(json.dumps({"current": current_sound(), "sounds": list_sounds()}))
+        return
+    if mode == "--set-sound":
+        if arg != "none" and arg not in (x["path"] for x in list_sounds()):
+            print(json.dumps({"ok": False, "message": "Unknown sound."}))
+            return
+        os.makedirs(os.path.dirname(SOUND_SETTING), exist_ok=True)
+        with open(SOUND_SETTING, "w") as f:
+            f.write(arg + "\n")
+        print(json.dumps({"ok": True, "current": arg}))
+        return
+    if mode == "--play":
+        if arg in (x["path"] for x in list_sounds()):
+            play(arg)
+        return
     if mode in ("--add", "--remove", "--hide", "--show", "--alert"):
         arg = sys.argv[2] if len(sys.argv) > 2 else ""
         if mode == "--add":
