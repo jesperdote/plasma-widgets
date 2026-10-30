@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Jesper Dote",
+                "Email": "jesperdote@gmail.com"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Claude subscription usage on the panel: 5-hour session and weekly %, colour-coded, from a local helper script",
+        "Icon": "dialog-information",
+        "Id": "com.github.jesperdote.claudeusage",
+        "License": "MIT",
+        "Name": "Claude Usage",
+        "Version": "1.0.0",
+        "Website": "https://github.com/jesperdote/plasma-widgets"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
