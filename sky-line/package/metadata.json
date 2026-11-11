@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Jesper Dote",
+                "Email": "jesperdote@gmail.com"
+            }
+        ],
+        "Category": "Date and Time",
+        "Description": "Today's 24 hours spread across the panel in sky colours, sunrise and sunset marked, with the current weather (or tonight's moon) sitting above the current time",
+        "Icon": "weather-clear",
+        "Id": "com.github.jesperdote.skyline",
+        "License": "MIT",
+        "Name": "Sky Line",
+        "Version": "1.0.0",
+        "Website": "https://github.com/jesperdote/plasma-widgets"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

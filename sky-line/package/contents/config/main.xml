@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name=""/>
+    <group name="General">
+        <!-- Fixed location, in decimal degrees (north and east are positive). -->
+        <entry name="latitude" type="Double"><default>0</default></entry>
+        <entry name="longitude" type="Double"><default>0</default></entry>
+        <!-- Optional: a command that prints "lat,lon" (for a location that follows you).
+             When set, it wins over the fixed location; it runs once an hour. -->
+        <entry name="locationCommand" type="String"><default></default></entry>
+    </group>
+    <group name="Appearance">
+        <!-- Weather emoji size in pixels; 0 = as big as fits above the line. -->
+        <entry name="iconSize" type="Int"><default>0</default></entry>
+        <!-- Point sizes of the hour labels and of the time/temperature beside the icon. -->
+        <entry name="labelSize" type="Int"><default>10</default></entry>
+        <entry name="timeSize" type="Int"><default>12</default></entry>
+        <!-- Thickness of the daylight part of the line, in pixels (night is half). -->
+        <entry name="lineWidth" type="Int"><default>4</default></entry>
+    </group>
+</kcfg>
