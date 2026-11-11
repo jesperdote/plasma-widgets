@@ -88,3 +88,19 @@ function weather(code, isDay, moonEmoji) {
     if (code >= 95) return { icon: "⛈️", text: "Thunderstorm" }
     return { icon: isDay ? "☀️" : moonEmoji, text: "" }
 }
+
+// Clock text in 24-hour ("08:45") or 12-hour ("8:45 AM") style.
+function clock(date, use24) {
+    if (use24)
+        return hhmm(date)
+    var h = date.getHours() % 12
+    return (h === 0 ? 12 : h) + ":" + pad(date.getMinutes()) + (date.getHours() < 12 ? " AM" : " PM")
+}
+
+// Hour label on the scale: "08" or, 12-hour, a compact "8a" / "12p".
+function hourLabel(h, use24) {
+    if (use24)
+        return pad(h)
+    var h12 = h % 12 === 0 ? 12 : h % 12
+    return h12 + (h % 24 < 12 ? "a" : "p")
+}

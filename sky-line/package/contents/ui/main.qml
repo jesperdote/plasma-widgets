@@ -52,7 +52,8 @@ PlasmoidItem {
             }
         }
         xhr.open("GET", "https://api.open-meteo.com/v1/forecast?latitude=" + lat.toFixed(4)
-                 + "&longitude=" + lon.toFixed(4) + "&current=temperature_2m,weather_code&timezone=auto")
+                 + "&longitude=" + lon.toFixed(4) + "&current=temperature_2m,weather_code&timezone=auto"
+                 + (Plasmoid.configuration.fahrenheit ? "&temperature_unit=fahrenheit" : ""))
         xhr.send()
     }
     onLatChanged: fetchWeather()
@@ -79,6 +80,7 @@ PlasmoidItem {
     Connections {
         target: Plasmoid.configuration
         function onLocationCommandChanged() { root.refreshLocation() }
+        function onFahrenheitChanged() { root.fetchWeather() }
     }
     Component.onCompleted: { refreshLocation(); fetchWeather() }
 
@@ -104,13 +106,14 @@ PlasmoidItem {
 
     toolTipMainText: (weather.text || (isDay ? "Day" : "Night"))
                      + (isNaN(temperature) ? "" : ", " + Math.round(temperature) + "°")
+    readonly property bool use24: Plasmoid.configuration.use24h
     toolTipSubText: {
         if (!root.hasLocation)
             return "Set a location in the widget settings"
         let s = ""
         if (root.sun) {
             const len = root.setH - root.riseH
-            s += "Sunrise " + Sky.hhmm(root.sun.rise) + " · Sunset " + Sky.hhmm(root.sun.set)
+            s += "Sunrise " + Sky.clock(root.sun.rise, root.use24) + " · Sunset " + Sky.clock(root.sun.set, root.use24)
             s += "\nDaylight " + Math.floor(len) + " h " + Math.round((len % 1) * 60) + " min"
         } else {
             s += "No sunrise or sunset today"
@@ -135,7 +138,7 @@ PlasmoidItem {
         function xAt(h) { return side + (h / 24) * span }
         readonly property real nowX: xAt(root.nowH)
 
-        TextMetrics { id: tickMetrics; font: view.small; text: "00" }
+        TextMetrics { id: tickMetrics; font: view.small; text: root.use24 ? "00" : "12a" }
 
         onWidthChanged: line.requestPaint()
         onHeightChanged: line.requestPaint()
@@ -143,6 +146,10 @@ PlasmoidItem {
             target: root
             function onNowChanged() { line.requestPaint() }
             function onSunChanged() { line.requestPaint() }
+        }
+        Connections {
+            target: Plasmoid.configuration
+            function onValueChanged() { line.requestPaint() }
         }
 
         Canvas {
@@ -158,21 +165,30 @@ PlasmoidItem {
                 for (const [h, c] of Sky.skyStops(root.riseH, root.setH))
                     grad.addColorStop(h / 24, c)
 
-                // The whole day, thin; daylight hours thicker.
-                ctx.strokeStyle = grad
-                ctx.lineCap = "round"
-                ctx.globalAlpha = 0.55
-                ctx.lineWidth = Math.max(1, v.lw / 2)
-                ctx.beginPath()
-                ctx.moveTo(v.xAt(0), v.lineY)
-                ctx.lineTo(v.xAt(24), v.lineY)
-                ctx.stroke()
-                ctx.globalAlpha = 1
-                ctx.lineWidth = v.lw
-                ctx.beginPath()
-                ctx.moveTo(v.xAt(root.riseH), v.lineY)
-                ctx.lineTo(v.xAt(root.setH), v.lineY)
-                ctx.stroke()
+                // The whole day, thin; daylight hours thicker. With "dim past", the part
+                // before now is drawn faint (two passes, each clipped to its side of now).
+                const passes = v.cfg.dimPast ? [[0, v.nowX, 0.3], [v.nowX, width, 1]] : [[0, width, 1]]
+                for (const [x0, x1, a] of passes) {
+                    ctx.save()
+                    ctx.beginPath()
+                    ctx.rect(x0, 0, x1 - x0, height)
+                    ctx.clip()
+                    ctx.strokeStyle = grad
+                    ctx.lineCap = "round"
+                    ctx.globalAlpha = 0.55 * a
+                    ctx.lineWidth = Math.max(1, v.lw / 2)
+                    ctx.beginPath()
+                    ctx.moveTo(v.xAt(0), v.lineY)
+                    ctx.lineTo(v.xAt(24), v.lineY)
+                    ctx.stroke()
+                    ctx.globalAlpha = a
+                    ctx.lineWidth = v.lw
+                    ctx.beginPath()
+                    ctx.moveTo(v.xAt(root.riseH), v.lineY)
+                    ctx.lineTo(v.xAt(root.setH), v.lineY)
+                    ctx.stroke()
+                    ctx.restore()
+                }
 
                 // Hour ticks.
                 ctx.globalAlpha = 0.7
@@ -200,30 +216,32 @@ PlasmoidItem {
             delegate: Text {
                 readonly property real h: index
                 readonly property real cx: view.xAt(h)
-                visible: root.hasLocation
-                         && Math.abs(cx - view.xAt(root.riseH)) > tickMetrics.width * 1.8
-                         && Math.abs(cx - view.xAt(root.setH)) > tickMetrics.width * 1.8
-                text: Sky.pad(h)
+                readonly property bool nearSunTime: sunTimes.visible
+                         && (Math.abs(cx - view.xAt(root.riseH)) < tickMetrics.width * 1.8
+                             || Math.abs(cx - view.xAt(root.setH)) < tickMetrics.width * 1.8)
+                visible: root.hasLocation && h % Math.max(1, view.cfg.labelEvery) === 0 && !nearSunTime
+                text: Sky.hourLabel(h, root.use24)
                 font: view.small
                 color: "#A5ADCB"
-                opacity: 0.8
+                opacity: view.cfg.dimPast && h < root.nowH - 0.5 ? 0.35 : 0.8
                 x: Math.max(0, Math.min(view.width - width, cx - width / 2))
                 y: view.lineY + view.lw / 2 + 2
             }
         }
 
         // Sunrise and sunset times on the scale.
+        Item { id: sunTimes; visible: root.sun !== null && view.cfg.showSunTimes }
         Text {
-            visible: root.sun !== null
-            text: root.sun ? "↑" + Sky.hhmm(root.sun.rise) : ""
+            visible: sunTimes.visible
+            text: root.sun ? "↑" + Sky.clock(root.sun.rise, root.use24) : ""
             font: view.small
             color: "#F5A97F"
             x: view.xAt(root.riseH) - width / 2
             y: view.lineY + view.lw / 2 + 2
         }
         Text {
-            visible: root.sun !== null
-            text: root.sun ? "↓" + Sky.hhmm(root.sun.set) : ""
+            visible: sunTimes.visible
+            text: root.sun ? "↓" + Sky.clock(root.sun.set, root.use24) : ""
             font: view.small
             color: "#C6A0F6"
             x: view.xAt(root.setH) - width / 2
@@ -241,8 +259,11 @@ PlasmoidItem {
             y: view.lineY - view.lw / 2 - height + Math.round(height * 0.12)
         }
         Text {
-            visible: root.hasLocation
-            text: Sky.hhmm(root.now) + (isNaN(root.temperature) ? "" : "  " + Math.round(root.temperature) + "°")
+            readonly property var parts: [view.cfg.showTime ? Sky.clock(root.now, root.use24) : "",
+                                          view.cfg.showTemp && !isNaN(root.temperature) ? Math.round(root.temperature) + "°" : ""]
+                                         .filter(p => p !== "")
+            visible: root.hasLocation && parts.length > 0
+            text: parts.join("  ")
             font: view.timeFont
             color: root.isDay ? "#FFD27A" : "#E2E4F6"
             readonly property bool roomRight: icon.x + icon.width + 4 + width < view.width

@@ -19,5 +19,15 @@
         <entry name="timeSize" type="Int"><default>12</default></entry>
         <!-- Thickness of the daylight part of the line, in pixels (night is half). -->
         <entry name="lineWidth" type="Int"><default>4</default></entry>
+        <!-- What sits beside the weather icon; with both off only the icon is left. -->
+        <entry name="showTime" type="Bool"><default>true</default></entry>
+        <entry name="showTemp" type="Bool"><default>true</default></entry>
+        <entry name="use24h" type="Bool"><default>true</default></entry>
+        <entry name="fahrenheit" type="Bool"><default>false</default></entry>
+        <entry name="showSunTimes" type="Bool"><default>true</default></entry>
+        <!-- Hour labels every N hours (1, 2, 3 or 6); the ticks stay hourly. -->
+        <entry name="labelEvery" type="Int"><default>1</default></entry>
+        <!-- Fade the part of the day that is already past. -->
+        <entry name="dimPast" type="Bool"><default>false</default></entry>
     </group>
 </kcfg>

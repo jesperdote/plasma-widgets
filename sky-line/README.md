@@ -24,10 +24,15 @@ Weather comes from [Open-Meteo](https://open-meteo.com/) (free, no key), every 1
 sunset use the SunCalc formulas (Vladimir Agafonkin, BSD-2-Clause); the moon phase uses the mean
 synodic month, so it can be a few hours off the exact phase change.
 
-## Appearance
+## Settings
 
-Right-click → **Configure Sky Line…** → **Appearance**: weather icon size (or *Fit*), hour-label
-size, time/temperature size and line thickness.
+Right-click → **Configure Sky Line…** → **Appearance**:
+
+- **Beside the weather icon:** current time and/or temperature; turn both off for just the icon.
+- **Clock:** 24-hour (08:45) or 12-hour (8:45 AM; hour labels like 8a, 12p).
+- **Temperature:** °C or °F.
+- **Scale:** sunrise/sunset times on or off; hour labels every 1, 2, 3 or 6 hours; fade the hours already past.
+- **Sizes:** weather icon (or *Fit*), hour labels, time/temperature, line thickness.
 
 ## Install
 
