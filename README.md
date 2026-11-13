@@ -1,7 +1,8 @@
 # plasma-widgets
 
 KDE Plasma 6 widgets I've built for my own desktop and am sharing in case they're useful to
-anyone else. Each widget lives in its own folder with its own README and install steps.
+anyone else. Each widget here lives in its own folder with its own README and install steps;
+the ones marked *own repo* have moved to a repository of their own, with releases.
 
 | Widget | What it does |
 |---|---|
@@ -10,6 +11,8 @@ anyone else. Each widget lives in its own folder with its own README and install
 | [NBA Scores](nba-scores/) | Live scores of the NBA games and teams you follow on the panel; every game of the day in the popup |
 | [Claude Usage](claude-usage/) | Your Claude subscription's 5-hour and weekly usage on the panel (needs a local helper script) |
 | [CPU & RAM](system-load/) | CPU and RAM usage on the panel, stacked with icons; click opens System Monitor |
+| [Sky Line](https://github.com/jesperdote/plasma-sky-line) (own repo) | Today's 24 hours across the panel in sky colours, sunrise/sunset, and the current weather above the current time |
+| [Switchboard](https://github.com/jesperdote/plasma-switchboard) (own repo) | Hide and show any panel widget in place, and switch presets (Full, Focus, Screen-share…); also a `widgetctl` command (needs Panel Colorizer) |
 
 ## Installing any widget
 
