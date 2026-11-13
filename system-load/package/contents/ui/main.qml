@@ -25,8 +25,11 @@ PlasmoidItem {
         onNewData: (source, data) => disconnectSource(source)
     }
 
-    function level(p) {
-        return p >= 90 ? "#F85149" : p >= 70 ? "#E3B341" : Kirigami.Theme.textColor
+    // Each row has its own colour; warnings still win.
+    readonly property color cpuColor: "#F5BDE6"
+    readonly property color ramColor: "#8AADF4"
+    function level(p, normal) {
+        return p >= 90 ? "#F85149" : p >= 70 ? "#E3B341" : normal
     }
 
     // Panel Colorizer repaints panel text when children change; keep the warning colours.
@@ -56,7 +59,7 @@ PlasmoidItem {
             Kirigami.Icon {
                 source: "cpu"
                 isMask: true
-                color: Kirigami.Theme.textColor
+                color: root.cpuColor
                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
             }
@@ -64,19 +67,19 @@ PlasmoidItem {
                 // Fixed width so the panel doesn't shift as the number changes.
                 Layout.preferredWidth: metrics.width
                 text: (cpu.value || 0).toFixed(1) + "%"
-                wanted: root.level(cpu.value || 0)
+                wanted: root.level(cpu.value || 0, root.cpuColor)
             }
             Kirigami.Icon {
                 source: Qt.resolvedUrl("../images/ram.svg")
                 isMask: true
-                color: Kirigami.Theme.textColor
+                color: root.ramColor
                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
             }
             ValueLabel {
                 Layout.preferredWidth: metrics.width
                 text: (ram.value || 0).toFixed(1) + "%"
-                wanted: root.level(ram.value || 0)
+                wanted: root.level(ram.value || 0, root.ramColor)
             }
         }
         TextMetrics { id: metrics; text: "100.0%" }
